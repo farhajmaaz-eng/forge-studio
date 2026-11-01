@@ -3,22 +3,19 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import {
   Activity,
+  Search,
+  RefreshCw,
+  LayoutGrid,
   ArrowRight,
-  ArrowUpRight,
   Box,
   Check,
   CheckCheck,
   ChevronRight,
-  CircleDot,
-  Clock3,
-  Code2,
-  Command,
   Flame,
   Gamepad2,
   Gauge,
   GitBranch,
   Home,
-  Layers3,
   Link2,
   ListTodo,
   Loader2,
@@ -38,6 +35,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { roles, type Role } from "@/lib/roles";
+import { Avatar } from "./agent-avatar";
+import Overview from "./overview";
+import CommandPalette from "./command-palette";
 const nav = [
   ["home", "Overview", Home],
   ["chat", "Lead Chat", MessageSquare],
@@ -61,17 +61,6 @@ function Badge({ value }: { value: string }) {
     </span>
   );
 }
-function Avatar({ name, size = "" }: { name: string; size?: string }) {
-  const r = roles[name as Role];
-  return (
-    <span
-      className={`avatar ${size}`}
-      style={{ "--agent": r?.color || "#aaa" } as React.CSSProperties}
-    >
-      {name === "Lead" ? <Sparkles size={19} /> : name.slice(0, 2)}
-    </span>
-  );
-}
 export default function Studio({ page }: { page: string }) {
   const [data, setData] = useState<any>(null),
     [error, setError] = useState(""),
@@ -81,7 +70,26 @@ export default function Studio({ page }: { page: string }) {
     [selectedAgent, setSelectedAgent] = useState("Lead"),
     [filter, setFilter] = useState("all"),
     [query, setQuery] = useState(""),
-    [connection, setConnection] = useState("polling");
+    [connection, setConnection] = useState("polling"),
+    [paletteOpen, setPaletteOpen] = useState(false);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    document.addEventListener("keydown", key);
+    const agent = new URLSearchParams(location.search).get("agent");
+    if (agent && agent in roles) setSelectedAgent(agent);
+    const game = localStorage.getItem("forge-game");
+    if (game) setSelectedGame(game);
+    return () => document.removeEventListener("keydown", key);
+  }, [page]);
+  function chooseGame(id: string) {
+    setSelectedGame(id);
+    localStorage.setItem("forge-game", id);
+  }
   const load = useCallback(async () => {
     try {
       const r = await fetch("/api/snapshot");
@@ -120,7 +128,11 @@ export default function Studio({ page }: { page: string }) {
     };
   }, [load, data?.settings.workerPort]);
   useEffect(() => {
-    if (data?.games.length && !selectedGame) setSelectedGame(data.games[0].id);
+    if (
+      data?.games.length &&
+      !data.games.some((g: any) => g.id === selectedGame)
+    )
+      chooseGame(data.games[0].id);
   }, [data, selectedGame]);
   async function act(path: string, body: any) {
     setBusy(true);
@@ -154,7 +166,9 @@ export default function Studio({ page }: { page: string }) {
     e.preventDefault();
     const form = e.currentTarget;
     const content = String(new FormData(form).get("content") || "");
-    if (await act("chat", { content, gameId: selectedGame })) form.reset();
+    const result = await act("chat", { content, gameId: selectedGame });
+    if (result) form.reset();
+    return !!result;
   }
   const composer = (
     <form className="composer" onSubmit={send}>
@@ -164,7 +178,7 @@ export default function Studio({ page }: { page: string }) {
         <select
           aria-label="Active game"
           value={selectedGame}
-          onChange={(e) => setSelectedGame(e.target.value)}
+          onChange={(e) => chooseGame(e.target.value)}
         >
           <option value="">Select a game</option>
           {data?.games.map((g: any) => (
@@ -193,7 +207,19 @@ export default function Studio({ page }: { page: string }) {
     </form>
   );
   return (
-    <div className="app">
+    <div className={`app page-${page}`}>
+      {paletteOpen && (
+        <CommandPalette
+          tasks={tasks}
+          close={() => setPaletteOpen(false)}
+          choose={(href) => {
+            const name = new URL(href, location.origin).searchParams.get(
+              "agent",
+            );
+            if (name && name in roles) setSelectedAgent(name);
+          }}
+        />
+      )}
       <aside className="sidebar">
         <Link href="/" className="brand">
           <span className="brand-symbol">
@@ -208,22 +234,55 @@ export default function Studio({ page }: { page: string }) {
           </div>
           <ChevronRight size={14} />
         </div>
+        <button
+          className="workspace-search"
+          onClick={() => setPaletteOpen(true)}
+        >
+          <Search size={15} />
+          <span>Search or jump to…</span>
+          <kbd>⌘ K</kbd>
+        </button>
         <span className="nav-label">WORKSPACE</span>
         <nav>
           {nav.map(([id, label, Icon]) => (
             <Link
               href={id === "home" ? "/" : "/" + id}
               key={id}
+              aria-label={label}
+              aria-current={page === id ? "page" : undefined}
+              title={label}
               className={page === id ? "nav-item active" : "nav-item"}
             >
               <Icon size={18} />
-              {label}
+              <span className="nav-text">{label}</span>
               {id === "reviews" && approvals.length > 0 && (
                 <span className="count">{approvals.length}</span>
               )}
             </Link>
           ))}
         </nav>
+        <div className="sidebar-team">
+          <span className="nav-label">
+            YOUR TEAM <span>07</span>
+          </span>
+          <div>
+            {Object.keys(roles).map((name) => (
+              <Link
+                href={`/team?agent=${name}`}
+                key={name}
+                title={name}
+                onClick={() => setSelectedAgent(name)}
+                aria-label={`Open ${name} agent`}
+              >
+                <Avatar
+                  name={name}
+                  size="mini"
+                  working={running.some((t) => t.agent === name)}
+                />
+              </Link>
+            ))}
+          </div>
+        </div>
         <div className="sidebar-footer">
           <div className="local-card">
             <ShieldCheck size={19} />
@@ -243,35 +302,69 @@ export default function Studio({ page }: { page: string }) {
       <div className="main">
         <header className="topbar">
           <div className="breadcrumb">
-            Workspace <ChevronRight size={13} />
-            <span>{title}</span>
+            <div className="game-switcher">
+              <LayoutGrid size={15} />
+              <select
+                aria-label="Workspace game"
+                value={selectedGame}
+                onChange={(e) => chooseGame(e.target.value)}
+              >
+                <option value="">Your workspace</option>
+                {data?.games.map((g: any) => (
+                  <option value={g.id} key={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <span className="breadcrumb-slash">/</span>
+            <span className="breadcrumb-page">{title}</span>
           </div>
           <div className="topbar-right">
-            <span className="connection">
+            <span
+              className={`connection ${connection === "live" && data ? "is-live" : ""}`}
+            >
               <span
-                className={`dot ${data?.settings.studioStatus === "connected" ? "green" : "amber"}`}
-              />{" "}
-              Studio{" "}
-              {data?.settings.studioStatus === "connected"
-                ? "connected"
-                : "offline"}
+                className={`dot ${connection === "live" && data ? "green" : "amber"}`}
+              />
+              {connection === "live" && data
+                ? "Live workspace"
+                : "Reconnecting"}
             </span>
-            <span className="top-divider" />
-            <span className="shortcut">
-              <Command size={13} /> Local
-            </span>
+            <button
+              className="refresh-button"
+              onClick={() => void load()}
+              title="Refresh workspace"
+              aria-label="Refresh workspace"
+            >
+              <RefreshCw size={15} />
+              <span>Refresh</span>
+            </button>
+            <button
+              className="mobile-search icon-link"
+              onClick={() => setPaletteOpen(true)}
+              aria-label="Search workspace"
+            >
+              <Search size={17} />
+            </button>
+            <Button asChild>
+              <Link href="/chat">
+                <Plus size={16} />
+                <span>New request</span>
+              </Link>
+            </Button>
           </div>
         </header>
         <main>
           <div className="page-title">
             <div>
-              <div className="eyebrow">YOUR AI DEVELOPMENT STUDIO</div>
-              <h1>
-                {page === "home" ? "A little spark. A whole team." : title}
-              </h1>
+              <div className="eyebrow">
+                {page === "home" ? "MISSION CONTROL" : "YOUR WORKSPACE"}
+              </div>
+              <h1>{page === "home" ? "Your studio, at a glance." : title}</h1>
               <p>
                 {page === "home"
-                  ? "Turn your next Roblox idea into something players love."
+                  ? "The big picture. The next move. Everything in one place."
                   : (
                       {
                         chat: "One conversation. Seven independent minds.",
@@ -317,196 +410,12 @@ export default function Studio({ page }: { page: string }) {
             </div>
           )}
           {data && page === "home" && (
-            <>
-              <div className="stats">
-                <Stat
-                  label="Team availability"
-                  value={`${running.length} / 7`}
-                  sub={`${Object.keys(roles).length} independent specialists`}
-                  icon={<Users size={18} />}
-                />
-                <Stat
-                  label="Tasks completed"
-                  value={String(done.length).padStart(2, "0")}
-                  sub={`${tasks.filter((t) => t.status === "queued").length} waiting in the queue`}
-                  icon={<CheckCheck size={18} />}
-                />
-                <Stat
-                  label="Needs your review"
-                  value={String(approvals.length).padStart(2, "0")}
-                  sub="You stay in the driver's seat"
-                  icon={<ShieldCheck size={18} />}
-                />
-                <Stat
-                  label="API spending"
-                  value={money(data.spend.cost)}
-                  sub={`of $${data.settings.cap.toFixed(2)} workspace budget`}
-                  icon={<Gauge size={18} />}
-                />
-              </div>
-              <div className="home-grid">
-                <section className="panel launch-panel">
-                  <div className="section-label">
-                    <span className="tiny-icon">
-                      <Zap size={15} />
-                    </span>{" "}
-                    FROM IDEA TO PLAY
-                  </div>
-                  <h2>
-                    Your next great game
-                    <br />
-                    starts with a conversation.
-                  </h2>
-                  <p>
-                    Give your Lead the big picture. Your team will work out
-                    <br className="desktop" /> the details, build in Studio, and
-                    test every change.
-                  </p>
-                  {composer}
-                  <div className="suggestions">
-                    <span>Try an idea</span>
-                    {[
-                      "Build an obby checkpoint system",
-                      "Design a cozy village",
-                      "Add a daily rewards UI",
-                    ].map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => {
-                          const el =
-                            document.querySelector<HTMLTextAreaElement>(
-                              ".composer textarea",
-                            );
-                          if (el) {
-                            el.value = s;
-                            el.focus();
-                          }
-                        }}
-                      >
-                        {s}
-                        <ArrowUpRight size={12} />
-                      </button>
-                    ))}
-                  </div>
-                </section>
-                <section className="panel runtime">
-                  <div className="panel-heading">
-                    <h3>
-                      <Radio size={16} /> Runtime status
-                    </h3>
-                    <span className="live">
-                      <span className="dot green" />
-                      {connection === "live" ? "LIVE" : "POLLING"}
-                    </span>
-                  </div>
-                  <div className="orbit">
-                    <div className="orbit-ring one" />
-                    <div className="orbit-ring two" />
-                    <div className="orbit-center">
-                      <Flame size={34} />
-                    </div>
-                    <span className="orbit-node n1">
-                      <Code2 size={16} />
-                    </span>
-                    <span className="orbit-node n2">
-                      <Layers3 size={16} />
-                    </span>
-                    <span className="orbit-node n3">
-                      <ShieldCheck size={16} />
-                    </span>
-                  </div>
-                  <h3>
-                    {data.settings.paused
-                      ? "Team paused"
-                      : running.length
-                        ? "Your team is building"
-                        : "Ready when you are"}
-                  </h3>
-                  <p>
-                    {data.keyConfigured
-                      ? "Your independent worker is standing by."
-                      : "Add your OpenRouter key to bring the team online."}
-                  </p>
-                  <div className="runtime-row">
-                    <span>Worker process</span>
-                    <Badge
-                      value={
-                        Date.now() - data.settings.workerHeartbeat < 10000
-                          ? "online"
-                          : "offline"
-                      }
-                    />
-                  </div>
-                  <div className="runtime-row">
-                    <span>Parallel workers</span>
-                    <b>
-                      {running.length} <small>/ 3 max</small>
-                    </b>
-                  </div>
-                  <div className="runtime-row">
-                    <span>Studio bridge</span>
-                    <Badge value={data.settings.studioStatus} />
-                  </div>
-                  <Link href="/settings" className="text-link">
-                    Configure integrations <ArrowRight size={14} />
-                  </Link>
-                </section>
-              </div>
-              <div className="section-heading">
-                <div>
-                  <h2>
-                    Meet your team <span className="subtle">07</span>
-                  </h2>
-                  <p>Different specialties. One shared vision.</p>
-                </div>
-                <Link href="/team" className="text-link">
-                  Manage team <ArrowRight size={14} />
-                </Link>
-              </div>
-              <div className="agent-strip">
-                {Object.entries(roles).map(([name, r]) => (
-                  <Link href="/team" key={name} className="agent-tile">
-                    <Avatar name={name} />
-                    <strong>{name}</strong>
-                    <span>{r.title}</span>
-                    <small>
-                      <span
-                        className={`dot ${running.some((t) => t.agent === name) ? "green" : "muted"}`}
-                      />
-                      {running.some((t) => t.agent === name)
-                        ? "Working"
-                        : "Standing by"}
-                    </small>
-                  </Link>
-                ))}
-              </div>
-              <div className="bottom-grid">
-                <section className="panel">
-                  <div className="panel-heading">
-                    <h3>Recent tasks</h3>
-                    <Link href="/tasks" className="text-link">
-                      View all <ArrowRight size={13} />
-                    </Link>
-                  </div>
-                  {tasks.length ? (
-                    tasks.slice(0, 4).map((t) => <TaskRow key={t.id} t={t} />)
-                  ) : (
-                    <Empty
-                      icon={<ListTodo />}
-                      title="A clean slate"
-                      text="Your first request becomes a plan, then a queue of focused tasks."
-                    />
-                  )}
-                </section>
-                <section className="panel">
-                  <div className="panel-heading">
-                    <h3>Studio activity</h3>
-                    <Activity size={16} />
-                  </div>
-                  <Events events={data.events.slice(0, 5)} />
-                </section>
-              </div>
-            </>
+            <Overview
+              data={data}
+              busy={busy}
+              selectedGame={selectedGame}
+              send={send}
+            />
           )}
           {data && page === "chat" && (
             <div className="chat-layout">
@@ -768,7 +677,7 @@ export default function Studio({ page }: { page: string }) {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => setSelectedGame(g.id)}
+                        onClick={() => chooseGame(g.id)}
                       >
                         Use this game <ArrowRight size={14} />
                       </Button>
@@ -1040,28 +949,6 @@ export default function Studio({ page }: { page: string }) {
         </main>
       </div>
     </div>
-  );
-}
-function Stat({
-  label,
-  value,
-  sub,
-  icon,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <section className="stat panel">
-      <div>
-        <span>{label}</span>
-        {icon}
-      </div>
-      <strong>{value}</strong>
-      <small>{sub}</small>
-    </section>
   );
 }
 function Empty({

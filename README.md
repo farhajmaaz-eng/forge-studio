@@ -1,6 +1,6 @@
 # Forge Studio
 
-A local-first Roblox AI development studio built with Next.js, TypeScript, Tailwind CSS, shadcn/ui-compatible Radix button components, SQLite, LangGraph.js, and the official MCP TypeScript SDK. Original dark workspace design; no reference screenshots were included with the request.
+A local-first Roblox AI development studio built with Next.js, TypeScript, Tailwind CSS, shadcn/ui-compatible Radix button components, SQLite, LangGraph.js, and the official MCP TypeScript SDK. Original dark workspace design informed by the published Home and Lead product screenshots at [roautomation.dev](https://roautomation.dev). Reference artwork and branding are not bundled.
 
 ## Start here
 
@@ -68,11 +68,14 @@ npm run build
 # With worker + dashboard running:
 npx playwright install chromium
 node scripts/smoke.mjs
+node scripts/ui-smoke.mjs
 ```
 
 The integration test replaces **only model responses** with deterministic test responses and launches a **test-only MCP stdio server** through the actual SDK. It verifies Lead delegation → queued Builder → approval before file modification → independent Tester read/play/console evidence → user review, plus budget reservations, unauthorized-tool rejection and restart recovery. The test does not spend OpenRouter credit and is not a real Roblox playtest.
 
-Browser smoke checks visit all eight pages, check console errors and mobile overflow, and write desktop/mobile screenshots to `artifacts/`.
+Browser smoke checks visit all eight pages, check console errors and mobile overflow, and write desktop/mobile screenshots to `artifacts/`. The extended UI check covers 1440px, 768px and 390px layouts, quick prompts, Ctrl/Cmd+K navigation, Escape handling, and agent selection during live refreshes. Its approval-state fixture stays in browser request interception and never enters the application database.
+
+The dashboard includes a compact Lead request bar, actionable setup and approval cards, live agent rows, game progress and budget tracking. Search pages, agents and tasks with **Ctrl/Cmd+K**. The selected game persists across pages and reloads. Geist is served locally under its included SIL Open Font License (`public/fonts/OFL.txt`).
 
 **Verified here:** dependency installation; production build; TypeScript; SDK protocol integration workflow; budget, permissions and recovery tests; local UI/browser checks (see delivery report for results).
 
