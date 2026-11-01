@@ -1,5 +1,5 @@
 import {
-  Sparkles,
+  GitBranch,
   Blocks,
   Hammer,
   PanelsTopLeft,
@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { roles, type Role } from "@/lib/roles";
 const icons = {
-  Lead: Sparkles,
+  Lead: GitBranch,
   Architect: Blocks,
   Builder: Hammer,
   Frame: PanelsTopLeft,

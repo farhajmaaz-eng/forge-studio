@@ -13,6 +13,7 @@ for (const path of [
   "/tasks",
   "/games",
   "/reviews",
+  "/library",
   "/logs",
   "/settings",
 ]) {

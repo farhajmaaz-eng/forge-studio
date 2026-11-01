@@ -44,7 +44,7 @@ export default function CommandPalette({
     })),
     ...tasks.slice(0, 30).map((t) => ({
       label: t.title,
-      href: "/tasks",
+      href: `/tasks?task=${t.id}`,
       category: "Tasks",
       icon: FileText,
     })),
@@ -64,7 +64,7 @@ export default function CommandPalette({
         <input
           autoFocus
           aria-label="Search pages, agents, and tasks"
-          placeholder="Where would you like to go?"
+          placeholder="Search pages, agents or tasks"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />

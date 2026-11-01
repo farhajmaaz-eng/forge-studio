@@ -156,6 +156,16 @@ describe("Persistent local workflow", () => {
       (store.db.prepare("SELECT count(*) AS n FROM locks").get() as any).n,
     ).toBe(0);
   }, 20000);
+  it("keeps provider catalogs and full conversations out of live dashboard snapshots", () => {
+    store.set("pricing", { "test/model": { prompt: 0.01, completion: 0.02 } });
+    const snapshot = store.snapshot();
+    expect(snapshot.settings).not.toHaveProperty("pricing");
+    expect(store.get<any>("pricing")["test/model"].completion).toBe(0.02);
+    expect(snapshot.tasks.length).toBeGreaterThan(0);
+    expect(snapshot.tasks[0]).not.toHaveProperty("messages");
+    const persisted = store.task((snapshot.tasks[0] as any).id);
+    expect(persisted.messages).toBeDefined();
+  });
   it("reserves atomically against cap and includes unknown outcomes", () => {
     store.set("cap", 1);
     store.reserve("t", "Lead", "m", 0.7);

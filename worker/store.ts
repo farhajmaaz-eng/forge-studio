@@ -120,14 +120,17 @@ export function reserve(
 }
 export function snapshot() {
   const settings = Object.fromEntries(
-    (db.prepare("SELECT * FROM settings").all() as any[]).map((x) => [
-      x.key,
-      JSON.parse(x.value),
-    ]),
+    (
+      db.prepare("SELECT * FROM settings WHERE key != 'pricing'").all() as any[]
+    ).map((x) => [x.key, JSON.parse(x.value)]),
   );
   return {
     agents: db.prepare("SELECT * FROM agents").all(),
-    tasks: db.prepare("SELECT * FROM tasks ORDER BY created DESC").all(),
+    tasks: db
+      .prepare(
+        "SELECT id,run_id,agent,title,instructions,status,deps,result,attempts,steps,next_at,error,created,updated FROM tasks ORDER BY created DESC",
+      )
+      .all(),
     runs: db.prepare("SELECT * FROM runs ORDER BY created DESC").all(),
     games: db.prepare("SELECT * FROM games ORDER BY created DESC").all(),
     chat: db.prepare("SELECT * FROM chat ORDER BY rowid").all(),

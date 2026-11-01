@@ -13,6 +13,7 @@ try {
       "/tasks",
       "/games",
       "/reviews",
+      "/library",
       "/logs",
       "/settings",
     ]) {
@@ -27,7 +28,7 @@ try {
       )
         throw new Error(`Horizontal overflow: ${route} at ${width}`);
     }
-    console.log(`PASS all eight pages at ${width}px`);
+    console.log(`PASS all nine pages at ${width}px`);
   }
   await p.setViewportSize({ width: 1440, height: 1100 });
   await p.goto("http://127.0.0.1:3000");
@@ -96,9 +97,11 @@ try {
   await p.route("**/api/snapshot", (r) => r.fulfill({ json: fixture }));
   await p.goto("http://127.0.0.1:3000");
   await expect(
-    p.getByRole("heading", { name: "UI test pending change" }),
+    p
+      .locator(".attention-row strong")
+      .filter({ hasText: "UI test pending change" }),
   ).toBeVisible();
-  await expect(p.getByRole("link", { name: "Review change" })).toHaveAttribute(
+  await expect(p.locator(".attention-row").first()).toHaveAttribute(
     "href",
     "/reviews",
   );

@@ -3,21 +3,16 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
-  ArrowUpRight,
   Check,
-  CheckCheck,
   ChevronRight,
   Clock3,
-  Gamepad2,
-  GitBranch,
+  ExternalLink,
   Link2,
   ListTodo,
-  Plus,
   ShieldCheck,
-  Sparkles,
   Terminal,
-  Wallet,
-  Zap,
+  Plus,
+  Gamepad2,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Avatar } from "./agent-avatar";
@@ -35,202 +30,162 @@ export default function Overview({
 }) {
   const [prompt, setPrompt] = useState("");
   const tasks: any[] = data.tasks;
-  const pending = data.approvals.filter((a: any) => a.status === "pending");
   const running = tasks.filter((t) => t.status === "running");
   const queued = tasks.filter((t) => t.status === "queued");
-  const done = tasks.filter((t) => t.status === "completed");
+  const failed = tasks.filter((t) => ["failed", "blocked"].includes(t.status));
+  const pending = data.approvals.filter((a: any) => a.status === "pending");
   const reviews = data.runs.filter((r: any) => r.status === "review");
-  const needs = pending.length + reviews.length;
-  const cap = data.settings.cap;
-  const spent = data.spend.cost + data.spend.reserved;
-  const ready =
-    !!data.keyConfigured &&
-    data.settings.studioStatus === "connected" &&
-    data.games.length > 0;
+  const done = tasks.filter((t) => t.status === "completed");
   const setup = [
     {
       ok: data.keyConfigured,
-      title: "Connect your AI provider",
-      description: "Add your OpenRouter key to activate the team.",
+      title: "OpenRouter API key",
+      description: "Set OPENROUTER_API_KEY in .env and restart the worker.",
       href: "/settings",
-      icon: Zap,
     },
     {
       ok: data.settings.studioStatus === "connected",
-      title: "Connect Roblox Studio",
-      description: "Link your open Studio session to Forge.",
+      title: "Roblox Studio bridge",
+      description:
+        "Enable the official MCP server in Studio, then connect it in Settings.",
       href: "/settings",
-      icon: Link2,
     },
     {
       ok: data.games.length > 0,
-      title: "Bring your first game",
-      description: "Choose the world your team will work on.",
+      title: "Target game",
+      description: "Discover your Studio instance and register its ID.",
       href: "/games",
-      icon: Gamepad2,
     },
   ];
+  const ready = setup.every((x) => x.ok);
+  const notices = pending.length + reviews.length + failed.length;
   return (
-    <>
-      <div className="overview-pills">
-        <Link
-          href="/reviews"
-          className={`status-pill ${needs ? "attention" : ""}`}
-        >
-          <span className="dot amber" />
-          {needs} need you
-        </Link>
-        <Link href="/team" className="status-pill">
-          <span className="dot green" />
-          {running.length} working
-        </Link>
-        <Link href="/tasks" className="status-pill">
-          <Clock3 size={13} />
-          {queued.length} queued
-        </Link>
-        <span className="overview-date">
-          {new Date().toLocaleDateString(undefined, {
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-          })}
-        </span>
-      </div>
-      <form
-        className="lead-command"
-        onSubmit={async (e) => {
-          if (await send(e)) setPrompt("");
-        }}
-      >
-        <Avatar name="Lead" />
-        <div className="lead-command-input">
-          <label htmlFor="lead-request">YOUR LEAD IS LISTENING</label>
-          <input
-            id="lead-request"
-            name="content"
-            aria-label="Request to Lead"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="What would you like your team to build?"
-            required
-            maxLength={20000}
-          />
+    <div className="workspace-tiles">
+      <div className="overview-stats stats">
+        <div>
+          <span>Tasks</span>
+          <strong>
+            {done.length}
+            <small> / {tasks.length}</small>
+          </strong>
+          <label>completed</label>
         </div>
-        <Button
-          disabled={busy || !selectedGame || !prompt.trim()}
-          type="submit"
-        >
-          Ask Lead <ArrowRight size={16} />
-        </Button>
-      </form>
-      <div className="quick-prompts">
-        <span>Start with an idea</span>
-        {[
-          "Build an obby checkpoint system",
-          "Design a cozy village",
-          "Add a daily rewards UI",
-        ].map((s) => (
-          <button
-            key={s}
-            onClick={() => {
-              setPrompt(s);
-              document.getElementById("lead-request")?.focus();
-            }}
-          >
-            {s}
-            <ArrowUpRight size={12} />
-          </button>
-        ))}
-      </div>
-      <div className="stats overview-stats">
-        <Metric
-          title="Tasks completed"
-          value={String(done.length).padStart(2, "0")}
-          icon={<CheckCheck size={17} />}
-          detail={`${tasks.length} tasks across your workspace`}
-          tone="mint"
-        />
-        <Metric
-          title="Active requests"
-          value={String(
-            data.runs.filter((r: any) => r.status === "active").length,
-          ).padStart(2, "0")}
-          icon={<GitBranch size={17} />}
-          detail={`${running.length} of 3 worker slots in use`}
-          tone="violet"
-        />
-        <Metric
-          title="Your games"
-          value={String(data.games.length).padStart(2, "0")}
-          icon={<Gamepad2 size={17} />}
-          detail={
-            data.settings.studioStatus === "connected"
-              ? "Studio bridge connected"
-              : "Waiting for a Studio connection"
-          }
-          tone="blue"
-        />
-        <div className="metric-card">
-          <div className="metric-top">
-            <span>Workspace budget</span>
-            <Wallet size={17} />
-          </div>
-          <div className="metric-value">
-            ${data.spend.cost.toFixed(2)} <small>/ ${cap.toFixed(2)}</small>
-          </div>
+        <div>
+          <span>Workers</span>
+          <strong>
+            {running.length}
+            <small> / 3</small>
+          </strong>
+          <label>{queued.length} queued</label>
+        </div>
+        <div>
+          <span>Attention</span>
+          <strong className={notices ? "warning-text" : ""}>{notices}</strong>
+          <label>{failed.length} failed or blocked</label>
+        </div>
+        <div>
+          <span>API budget</span>
+          <strong>
+            ${data.spend.cost.toFixed(4)}
+            <small> / ${data.settings.cap.toFixed(2)}</small>
+          </strong>
           <progress
             aria-label="Workspace budget committed"
-            value={spent}
-            max={cap || 1}
+            value={data.spend.cost + data.spend.reserved}
+            max={data.settings.cap || 1}
           />
-          <small>
-            {data.spend.reserved > 0
-              ? `$${data.spend.reserved.toFixed(3)} reserved for active calls`
-              : `$${Math.max(0, cap - spent).toFixed(2)} available`}
-          </small>
+          <label>${data.spend.reserved.toFixed(4)} reserved</label>
         </div>
       </div>
-      <div className="mission-layout">
-        <div className="mission-main">
-          <div className="section-heading">
-            <h2>
-              Needs your attention{" "}
-              <span className="number-tag">
-                {needs || setup.filter((x) => !x.ok).length}
+      <div className="desktop-columns">
+        <div className="desktop-primary">
+          <section className="panel request-pane">
+            <div className="window-heading">
+              <span>
+                <Terminal size={14} /> lead / new request
               </span>
-            </h2>
-            <span className="section-meta">YOUR NEXT MOVE</span>
-          </div>
-          {!ready && (
-            <section className="setup-panel panel">
-              <div className="setup-header">
-                <span className="setup-symbol">
-                  <Sparkles size={22} />
+              <span className="pane-meta">
+                {data.settings.paused
+                  ? "paused"
+                  : ready
+                    ? "ready"
+                    : "setup required"}
+              </span>
+            </div>
+            <form
+              className="lead-command"
+              onSubmit={async (e) => {
+                if (await send(e)) setPrompt("");
+              }}
+            >
+              <label htmlFor="lead-request">Request</label>
+              <textarea
+                id="lead-request"
+                name="content"
+                aria-label="Request to Lead"
+                required
+                maxLength={20000}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Describe the change and how it should be verified."
+                rows={3}
+              />
+              <div className="request-actions">
+                <span>
+                  {selectedGame
+                    ? data.games.find((g: any) => g.id === selectedGame)?.name
+                    : "No target game selected"}
                 </span>
-                <div>
-                  <span className="section-kicker">LET’S GET YOU BUILDING</span>
-                  <h3>A few connections. A whole studio.</h3>
-                  <p>
-                    Give your team what it needs to bring your ideas to life.
-                  </p>
-                </div>
-                <span className="setup-fraction">
-                  {setup.filter((x) => x.ok).length}
-                  <small> / 3</small>
+                <Button
+                  type="submit"
+                  disabled={busy || !selectedGame || !prompt.trim()}
+                >
+                  Queue request <ArrowRight size={14} />
+                </Button>
+              </div>
+            </form>
+            <div className="quick-prompts">
+              <span>Examples:</span>
+              {[
+                "Build an obby checkpoint system",
+                "Design a cozy village",
+                "Add a daily rewards UI",
+              ].map((s) => (
+                <button
+                  type="button"
+                  key={s}
+                  onClick={() => {
+                    setPrompt(s);
+                    document.getElementById("lead-request")?.focus();
+                  }}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </section>
+          {!ready && (
+            <section className="panel setup-panel">
+              <div className="window-heading">
+                <span>
+                  <Link2 size={14} /> connection setup
+                </span>
+                <span className="pane-meta">
+                  {setup.filter((x) => x.ok).length}/3 connected
                 </span>
               </div>
               <div className="setup-steps">
-                {setup.map((step, i) => (
+                {setup.map((step) => (
                   <Link
                     className={`setup-step ${step.ok ? "complete" : ""}`}
-                    href={step.href}
                     key={step.title}
+                    href={step.href}
                   >
                     <span className="setup-step-number">
                       {step.ok ? (
-                        <Check size={15} />
+                        <Check size={14} />
                       ) : (
-                        String(i + 1).padStart(2, "0")
+                        <span className="dot amber" />
                       )}
                     </span>
                     <div>
@@ -238,147 +193,135 @@ export default function Overview({
                       <p>{step.description}</p>
                     </div>
                     {step.ok ? (
-                      <span className="setup-check">Connected</span>
+                      <span className="setup-check">ready</span>
                     ) : (
-                      <ArrowUpRight size={17} />
+                      <ChevronRight size={15} />
                     )}
                   </Link>
                 ))}
               </div>
             </section>
           )}
-          {pending.slice(0, 3).map((a: any) => {
-            const t = tasks.find((t) => t.id === a.task_id);
-            return (
-              <article key={a.id} className="attention-card">
-                <Avatar name={t?.agent || "Lead"} />
-                <div>
-                  <span className="section-kicker amber-text">
-                    APPROVAL NEEDED · {t?.agent || "YOUR TEAM"}
-                  </span>
-                  <h3>{t?.title || a.tool}</h3>
-                  <p>
-                    Your team is ready to run <code>{a.tool}</code> in Studio.
-                    Review the exact change before it happens.
-                  </p>
-                  <Button asChild variant="outline" size="sm">
-                    <Link href="/reviews">
-                      Review change <ArrowRight size={14} />
-                    </Link>
-                  </Button>
-                </div>
-              </article>
-            );
-          })}
-          {reviews.slice(0, 2).map((r: any) => (
-            <article key={r.id} className="attention-card verified">
-              <span className="attention-symbol">
-                <ShieldCheck size={21} />
-              </span>
-              <div>
-                <span className="section-kicker mint-text">
-                  TESTER VERIFIED · READY FOR YOU
+          {(notices > 0 || ready) && (
+            <section className="panel attention-pane">
+              <div className="window-heading">
+                <span>
+                  <ShieldCheck size={14} /> review &amp; recovery
                 </span>
-                <h3>{r.request}</h3>
-                <p>
-                  Your team finished building and testing. Take a look and have
-                  the final say.
-                </p>
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/reviews">
-                    Review the work <ArrowRight size={14} />
+                <span className="pane-meta">{notices} items</span>
+              </div>
+              {pending.slice(0, 3).map((a: any) => {
+                const t = tasks.find((t) => t.id === a.task_id);
+                return (
+                  <Link href="/reviews" className="attention-row" key={a.id}>
+                    <span className="state-square approval" />
+                    <div>
+                      <strong>{t?.title || a.tool}</strong>
+                      <small>
+                        Approval required · {a.tool} · {t?.agent}
+                      </small>
+                    </div>
+                    <ExternalLink size={14} />
                   </Link>
-                </Button>
-              </div>
-            </article>
-          ))}
-          {ready && !needs && (
-            <section className="all-clear panel">
-              <div className="all-clear-icon">
-                <CheckCheck size={24} />
-              </div>
-              <h3>You’re all caught up.</h3>
-              <p>
-                {running.length
-                  ? "Your team is working. Anything that needs your input will appear here."
-                  : "Give Lead your next idea. Your team is ready to get to work."}
-              </p>
-              <Link href="/chat" className="text-link">
-                Open Lead Chat <ArrowRight size={14} />
-              </Link>
+                );
+              })}
+              {reviews.slice(0, 2).map((r: any) => (
+                <Link href="/reviews" className="attention-row" key={r.id}>
+                  <span className="state-square completed" />
+                  <div>
+                    <strong>{r.request}</strong>
+                    <small>Tester verified · awaiting your review</small>
+                  </div>
+                  <ExternalLink size={14} />
+                </Link>
+              ))}
+              {failed.slice(0, 3).map((t) => (
+                <Link
+                  href={`/tasks?task=${t.id}`}
+                  className="attention-row"
+                  key={t.id}
+                >
+                  <span className="state-square failed" />
+                  <div>
+                    <strong>{t.title}</strong>
+                    <small>
+                      {t.agent} · {t.error || "Dependency needs attention"}
+                    </small>
+                  </div>
+                  <ExternalLink size={14} />
+                </Link>
+              ))}
+              {!notices && (
+                <p className="plain-empty">
+                  No approvals, failed tasks or pending reviews.
+                </p>
+              )}
             </section>
           )}
           <section className="panel work-panel">
-            <div className="panel-heading">
-              <h3>
-                <ListTodo size={17} /> The workbench
-              </h3>
-              <Link href="/tasks" className="text-link">
-                All tasks <ArrowUpRight size={14} />
+            <div className="window-heading">
+              <span>
+                <ListTodo size={14} /> task queue
+              </span>
+              <Link href="/tasks">
+                Open board <ChevronRight size={13} />
               </Link>
             </div>
-            {tasks.length ? (
-              <div className="workbench-tasks">
-                {tasks.slice(0, 5).map((t) => (
-                  <Link href="/tasks" key={t.id} className="workbench-task">
-                    <Avatar name={t.agent} size="mini" />
-                    <div>
+            <div className="queue-table">
+              <div className="queue-table-head">
+                <span>Task</span>
+                <span>Agent</span>
+                <span>State</span>
+              </div>
+              {tasks.length ? (
+                tasks.slice(0, 7).map((t) => (
+                  <Link
+                    key={t.id}
+                    className="queue-table-row"
+                    href={`/tasks?task=${t.id}`}
+                  >
+                    <span>
                       <strong>{t.title}</strong>
                       <small>
-                        {t.agent} · {t.steps} model steps
+                        {t.steps} steps · {t.attempts} retries
                       </small>
-                    </div>
+                    </span>
+                    <span>{t.agent}</span>
                     <span className={`badge ${t.status}`}>{t.status}</span>
                   </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="workbench-empty">
-                <div className="empty-task-preview" aria-hidden="true">
-                  <span />
+                ))
+              ) : (
+                <div className="queue-empty">
+                  <ListTodo size={25} />
                   <div>
-                    <i />
-                    <i />
+                    <h3>Queue is empty</h3>
+                    <p>
+                      Requests are planned by Lead, assigned to specialists,
+                      then checked by Tester.
+                    </p>
                   </div>
-                  <Check size={14} />
                 </div>
-                <h3>Good things start with a first task.</h3>
-                <p>
-                  Ask Lead to plan a feature, fix a bug, or build something new.
-                  The work lands right here.
-                </p>
-                <Link href="/chat" className="text-link">
-                  Start a conversation <ArrowRight size={14} />
-                </Link>
-              </div>
-            )}
+              )}
+            </div>
             <div className="workbench-footer">
               <span>
-                <ShieldCheck size={13} /> Studio changes need your approval
+                Studio writes require approval
+                {!data.settings.approvalRequired ? " (currently disabled)" : ""}
               </span>
-              <span>
-                Plan <ChevronRight size={10} /> Build <ChevronRight size={10} />{" "}
-                Test <ChevronRight size={10} /> Review
-              </span>
+              <span>Plan → Build → Verify → Review</span>
             </div>
           </section>
           <section className="panel activity-panel">
-            <div className="panel-heading">
-              <h3>
-                <Terminal size={16} /> Latest activity
-              </h3>
-              <Link href="/logs" className="text-link">
-                View log <ArrowUpRight size={14} />
+            <div className="window-heading">
+              <span>
+                <Terminal size={14} /> event log
+              </span>
+              <Link href="/logs">
+                View all <ChevronRight size={13} />
               </Link>
             </div>
-            {data.events.slice(0, 4).map((e: any) => (
+            {data.events.slice(0, 6).map((e: any) => (
               <div className="compact-event" key={e.id}>
-                <span
-                  className={`dot ${e.level === "error" ? "amber" : "purple"}`}
-                />
-                <span>
-                  <strong>{e.agent}</strong> {e.message}
-                </span>
                 <time>
                   {new Date(
                     e.created.replace(" ", "T") + "Z",
@@ -387,30 +330,31 @@ export default function Overview({
                     minute: "2-digit",
                   })}
                 </time>
+                <strong>{e.agent}</strong>
+                <span className={e.level === "error" ? "failure-text" : ""}>
+                  {e.message}
+                </span>
               </div>
             ))}
             {!data.events.length && (
-              <p className="muted-text">
-                Your workspace activity will appear here.
-              </p>
+              <p className="plain-empty">No activity recorded.</p>
             )}
           </section>
         </div>
-        <aside className="mission-rail">
+        <aside className="desktop-secondary">
           <section className="panel team-live">
-            <div className="panel-heading">
-              <h3>
-                <span className="dot green" /> Your team, right now
-              </h3>
-              <span className="number-tag">07</span>
+            <div className="window-heading">
+              <span>
+                <span className="dot green" /> agents
+              </span>
+              <Link href="/team">
+                Configure <ChevronRight size={13} />
+              </Link>
             </div>
-            <p className="rail-description">
-              Independent minds. One shared vision.
-            </p>
             <div className="live-agent-list">
               {data.agents.map((a: any) => {
                 const active = running.find((t) => t.agent === a.name);
-                const queue = queued.filter((t) => t.agent === a.name);
+                const count = queued.filter((t) => t.agent === a.name).length;
                 return (
                   <Link
                     href={`/team?agent=${a.name}`}
@@ -426,120 +370,96 @@ export default function Overview({
                           : roles[a.name as keyof typeof roles].title}
                       </small>
                     </div>
-                    {active ? (
-                      <span
-                        className="agent-busy-indicator"
-                        aria-label="Working"
-                      />
-                    ) : queue.length ? (
-                      <span className="queue-count">{queue.length} queued</span>
-                    ) : (
-                      <span
-                        className={`agent-presence ${!a.enabled ? "disabled" : ""}`}
-                        title={a.enabled ? "Standing by" : "Disabled"}
-                      />
-                    )}
+                    <span className={`agent-status ${active ? "active" : ""}`}>
+                      {!a.enabled
+                        ? "off"
+                        : active
+                          ? "running"
+                          : count
+                            ? `${count} queued`
+                            : "idle"}
+                    </span>
                   </Link>
                 );
               })}
             </div>
-            <Link href="/team" className="rail-footer-link">
-              Meet your team <ArrowRight size={14} />
-            </Link>
           </section>
           <section className="panel game-progress-panel">
-            <div className="panel-heading">
-              <h3>Your worlds</h3>
-              <Link
-                href="/games"
-                aria-label="Add or manage games"
-                className="icon-link"
-              >
-                <Plus size={16} />
+            <div className="window-heading">
+              <span>
+                <Gamepad2 size={14} /> places
+              </span>
+              <Link href="/games" aria-label="Add game">
+                <Plus size={15} />
               </Link>
             </div>
             {data.games.length ? (
               data.games.slice(0, 3).map((g: any) => {
                 const runs = data.runs.filter((r: any) => r.game_id === g.id);
-                const latest = runs[0];
                 const gameTasks = tasks.filter((t) =>
                   runs.some((r: any) => r.id === t.run_id),
                 );
-                const gameDone = gameTasks.filter(
-                  (t) => t.status === "completed",
-                ).length;
                 return (
                   <Link href="/games" className="world-progress" key={g.id}>
-                    <div>
-                      <span className="world-icon">
-                        <Gamepad2 size={17} />
-                      </span>
-                      <strong>{g.name}</strong>
-                      <ChevronRight size={14} />
-                    </div>
+                    <strong>{g.name}</strong>
+                    <small>Studio {g.studio_id}</small>
                     <progress
                       aria-label={`${g.name} task completion`}
                       max={gameTasks.length || 1}
-                      value={gameDone}
+                      value={
+                        gameTasks.filter((t) => t.status === "completed").length
+                      }
                     />
                     <small>
-                      {latest
-                        ? `${gameDone} of ${gameTasks.length} tasks complete · ${latest.status}`
-                        : "Ready for its first request"}
+                      {gameTasks.filter((t) => t.status === "completed").length}{" "}
+                      / {gameTasks.length} tasks complete
                     </small>
                   </Link>
                 );
               })
             ) : (
-              <div className="world-empty">
-                <div className="world-cube" aria-hidden="true">
-                  <Gamepad2 size={28} />
-                </div>
-                <h3>A home for your next idea.</h3>
-                <p>Connect a game to start creating with your team.</p>
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/games">
-                    <Plus size={14} /> Add your first game
-                  </Link>
-                </Button>
+              <div className="plain-empty">
+                <p>No games registered.</p>
+                <Link href="/games" className="text-link">
+                  Add a Studio instance <ArrowRight size={13} />
+                </Link>
               </div>
             )}
           </section>
-          <div className="local-note">
-            <ShieldCheck size={17} />
-            <div>
-              <strong>Made here. Kept here.</strong>
-              <p>
-                Your games, keys, and agent memory stay in your local workspace.
-              </p>
+          <section className="panel runtime-summary">
+            <div className="window-heading">
+              <span>runtime / local</span>
             </div>
-          </div>
+            <dl>
+              <div>
+                <dt>Worker</dt>
+                <dd>
+                  {Date.now() - data.settings.workerHeartbeat < 10000
+                    ? "online"
+                    : "offline"}
+                </dd>
+              </div>
+              <div>
+                <dt>OpenRouter</dt>
+                <dd>{data.keyConfigured ? "configured" : "missing key"}</dd>
+              </div>
+              <div>
+                <dt>Studio</dt>
+                <dd>{data.settings.studioStatus}</dd>
+              </div>
+              <div>
+                <dt>Write approval</dt>
+                <dd>
+                  {data.settings.approvalRequired ? "required" : "disabled"}
+                </dd>
+              </div>
+            </dl>
+            <Link href="/settings" className="text-link">
+              Connection settings <ChevronRight size={13} />
+            </Link>
+          </section>
         </aside>
       </div>
-    </>
-  );
-}
-function Metric({
-  title,
-  value,
-  icon,
-  detail,
-  tone,
-}: {
-  title: string;
-  value: string;
-  icon: React.ReactNode;
-  detail: string;
-  tone: string;
-}) {
-  return (
-    <div className={`metric-card ${tone}`}>
-      <div className="metric-top">
-        <span>{title}</span>
-        {icon}
-      </div>
-      <div className="metric-value">{value}</div>
-      <small>{detail}</small>
     </div>
   );
 }

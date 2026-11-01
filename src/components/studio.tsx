@@ -1,8 +1,16 @@
 "use client";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useDesktopPreferences, downloadDiagnostics } from "@/lib/desktop";
+import { Appearance, Shortcuts } from "./desktop-controls";
 import {
   Activity,
+  PanelLeft,
+  Keyboard,
+  Palette,
+  Download,
+  Cpu,
   BookOpen,
   Search,
   RefreshCw,
@@ -41,9 +49,9 @@ import Overview from "./overview";
 import Library from "./library";
 import CommandPalette from "./command-palette";
 const nav = [
-  ["home", "Overview", Home],
+  ["home", "Workspace", Home],
   ["chat", "Lead Chat", MessageSquare],
-  ["team", "The team", Users],
+  ["team", "Agents", Users],
   ["tasks", "Task board", ListTodo],
   ["games", "Games", Gamepad2],
   ["reviews", "Reviews", ShieldCheck],
@@ -65,6 +73,48 @@ function Badge({ value }: { value: string }) {
   );
 }
 export default function Studio({ page }: { page: string }) {
+  const router = useRouter();
+  const [preferences, updatePreferences] = useDesktopPreferences();
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [clock, setClock] = useState("");
+  const [noticeError, setNoticeError] = useState(false);
+  const [focusedTaskId, setFocusedTaskId] = useState("");
+  const [taskFocusVersion, setTaskFocusVersion] = useState(0);
+  useEffect(() => {
+    const refresh = () =>
+      setClock(
+        new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      );
+    refresh();
+    const timer = setInterval(refresh, 30000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const editing =
+        target.isContentEditable ||
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
+        !!document.querySelector("dialog[open]");
+      if (editing) return;
+      if (e.altKey && /^[1-9]$/.test(e.key)) {
+        e.preventDefault();
+        const target = nav[Number(e.key) - 1];
+        router.push(target[0] === "home" ? "/" : "/" + target[0]);
+      } else if (e.altKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        updatePreferences({ focus: !preferences.focus });
+      } else if (e.key === "?" && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        setShortcutsOpen(true);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [preferences.focus, router, updatePreferences]);
   const [data, setData] = useState<any>(null),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
@@ -82,7 +132,9 @@ export default function Studio({ page }: { page: string }) {
         setPaletteOpen((v) => !v);
       }
     };
+    document.querySelector(".main")?.scrollTo({ top: 0 });
     document.addEventListener("keydown", key);
+    setFocusedTaskId(new URLSearchParams(location.search).get("task") || "");
     const agent = new URLSearchParams(location.search).get("agent");
     if (agent && agent in roles) setSelectedAgent(agent);
     const game = localStorage.getItem("forge-game");
@@ -137,9 +189,23 @@ export default function Studio({ page }: { page: string }) {
     )
       chooseGame(data.games[0].id);
   }, [data, selectedGame]);
+  useEffect(() => {
+    if (page !== "tasks") return;
+    const id =
+      focusedTaskId || new URLSearchParams(location.search).get("task");
+    if (!id) return;
+    const element = document.getElementById(
+      `task-${id}`,
+    ) as HTMLDetailsElement | null;
+    if (element && !element.open) {
+      element.open = true;
+      element.scrollIntoView({ block: "center" });
+    }
+  }, [page, data?.tasks?.length, focusedTaskId, taskFocusVersion]);
   async function act(path: string, body: any) {
     setBusy(true);
     setNotice("");
+    setNoticeError(false);
     try {
       const r = await fetch("/api/" + path, {
         method: "POST",
@@ -149,9 +215,21 @@ export default function Studio({ page }: { page: string }) {
       const out = await r.json();
       if (!r.ok) throw new Error(out.error);
       await load();
-      setNotice("Saved successfully");
+      setNotice(
+        (
+          {
+            chat: "Request queued",
+            settings: "Settings saved",
+            agents: "Agent settings saved",
+            approve: "Approval recorded",
+            review: "Review recorded",
+            retry: "Task queued",
+          } as Record<string, string>
+        )[path] || "",
+      );
       return out;
     } catch (e) {
+      setNoticeError(true);
       setNotice(e instanceof Error ? e.message : String(e));
       return null;
     } finally {
@@ -176,8 +254,8 @@ export default function Studio({ page }: { page: string }) {
   const composer = (
     <form className="composer" onSubmit={send}>
       <div className="composer-top">
-        <Sparkles size={17} />
-        <span>What are we building today?</span>
+        <MessageSquare size={17} />
+        <span>Request to Lead</span>
         <select
           aria-label="Active game"
           value={selectedGame}
@@ -210,12 +288,81 @@ export default function Studio({ page }: { page: string }) {
     </form>
   );
   return (
-    <div className={`app page-${page}`}>
+    <div
+      className={`app page-${page} ${preferences.focus ? "focus-mode" : ""}`}
+    >
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
+      <div className="desktop-bar">
+        <Link className="desktop-app-name" href="/">
+          <Terminal size={15} />
+          <strong>forge</strong>
+          <span>studio</span>
+        </Link>
+        <nav className="desktop-workspaces" aria-label="Workspace shortcuts">
+          {nav.map(([id, label], index) => (
+            <Link
+              href={id === "home" ? "/" : "/" + id}
+              key={id}
+              title={`${label} · Alt+${index + 1}`}
+              aria-label={`${label} workspace`}
+              aria-current={page === id ? "page" : undefined}
+            >
+              <span>{String(index + 1).padStart(2, "0")}</span>
+            </Link>
+          ))}
+        </nav>
+        <div className="desktop-tray">
+          <span className="desktop-worker">
+            <span
+              className={`dot ${data && Date.now() - data.settings.workerHeartbeat < 10000 ? "green" : "amber"}`}
+            />
+            {data && Date.now() - data.settings.workerHeartbeat < 10000
+              ? "worker online"
+              : "worker offline"}
+          </span>
+          <button
+            onClick={() => setShortcutsOpen(true)}
+            title="Keyboard shortcuts"
+            aria-label="Keyboard shortcuts"
+          >
+            <Keyboard size={15} />
+          </button>
+          <button
+            onClick={() =>
+              updatePreferences({
+                theme:
+                  preferences.theme === "nord"
+                    ? "graphite"
+                    : preferences.theme === "graphite"
+                      ? "evergreen"
+                      : "nord",
+              })
+            }
+            title={`Theme: ${preferences.theme}. Click to cycle.`}
+            aria-label="Cycle color scheme"
+          >
+            <Palette size={15} />
+          </button>
+          <time>{clock || "--:--"}</time>
+        </div>
+      </div>
+      {shortcutsOpen && <Shortcuts close={() => setShortcutsOpen(false)} />}
       {paletteOpen && (
         <CommandPalette
           tasks={tasks}
           close={() => setPaletteOpen(false)}
           choose={(href) => {
+            const taskId = new URL(href, location.origin).searchParams.get(
+              "task",
+            );
+            if (taskId) {
+              setFilter("all");
+              setQuery("");
+              setFocusedTaskId(taskId);
+              setTaskFocusVersion((v) => v + 1);
+            }
             const name = new URL(href, location.origin).searchParams.get(
               "agent",
             );
@@ -228,12 +375,12 @@ export default function Studio({ page }: { page: string }) {
           <span className="brand-symbol">
             <Flame size={24} />
           </span>{" "}
-          forge<span className="brand-tag">STUDIO</span>
+          forge<span className="brand-tag">/ local</span>
         </Link>
         <div className="workspace">
           <span className="workspace-logo">F</span>
           <div>
-            Personal workspace<small>Local development</small>
+            Workspace<small>Local development</small>
           </div>
           <ChevronRight size={14} />
         </div>
@@ -243,11 +390,11 @@ export default function Studio({ page }: { page: string }) {
         >
           <Search size={15} />
           <span>Search or jump to…</span>
-          <kbd>⌘ K</kbd>
+          <kbd>Ctrl K</kbd>
         </button>
         <span className="nav-label">WORKSPACE</span>
         <nav>
-          {nav.map(([id, label, Icon]) => (
+          {nav.map(([id, label, Icon], index) => (
             <Link
               href={id === "home" ? "/" : "/" + id}
               key={id}
@@ -258,6 +405,7 @@ export default function Studio({ page }: { page: string }) {
             >
               <Icon size={18} />
               <span className="nav-text">{label}</span>
+              <kbd className="nav-key">{index + 1}</kbd>
               {id === "reviews" && approvals.length > 0 && (
                 <span className="count">{approvals.length}</span>
               )}
@@ -287,24 +435,36 @@ export default function Studio({ page }: { page: string }) {
           </div>
         </div>
         <div className="sidebar-footer">
-          <div className="local-card">
-            <ShieldCheck size={19} />
-            <div>
-              Local by design<small>Your workspace. Your control.</small>
-            </div>
-          </div>
-          <div className="profile">
-            <div className="profile-avatar">Y</div>
-            <div>
-              Your studio<small>Independent creator</small>
-            </div>
-            <span className="dot green" />
+          <button
+            className="sidebar-utility"
+            onClick={() => setShortcutsOpen(true)}
+          >
+            <Keyboard size={15} /> Keyboard shortcuts <kbd>?</kbd>
+          </button>
+          <button
+            className="sidebar-utility"
+            onClick={() => downloadDiagnostics(data)}
+          >
+            <Download size={15} /> Download diagnostics
+          </button>
+          <div className="sidebar-local">
+            <span className="dot green" /> localhost / personal workspace
           </div>
         </div>
       </aside>
       <div className="main">
         <header className="topbar">
           <div className="breadcrumb">
+            <button
+              className="icon-link focus-toggle"
+              aria-label={
+                preferences.focus ? "Show navigation" : "Hide navigation"
+              }
+              title="Toggle navigation · Alt+F"
+              onClick={() => updatePreferences({ focus: !preferences.focus })}
+            >
+              <PanelLeft size={16} />
+            </button>
             <div className="game-switcher">
               <LayoutGrid size={15} />
               <select
@@ -312,7 +472,7 @@ export default function Studio({ page }: { page: string }) {
                 value={selectedGame}
                 onChange={(e) => chooseGame(e.target.value)}
               >
-                <option value="">Your workspace</option>
+                <option value="">Select target game</option>
                 {data?.games.map((g: any) => (
                   <option value={g.id} key={g.id}>
                     {g.name}
@@ -358,29 +518,27 @@ export default function Studio({ page }: { page: string }) {
             </Button>
           </div>
         </header>
-        <main>
+        <main id="main-content">
           <div className="page-title">
             <div>
-              <div className="eyebrow">
-                {page === "home" ? "MISSION CONTROL" : "YOUR WORKSPACE"}
-              </div>
-              <h1>{page === "home" ? "Your studio, at a glance." : title}</h1>
+              <h1>{page === "home" ? "Workspace" : title}</h1>
               <p>
-                {page === "home"
-                  ? "The big picture. The next move. Everything in one place."
-                  : (
-                      {
-                        chat: "One conversation. Seven independent minds.",
-                        team: "A focused specialist for every part of your game.",
-                        tasks: "From first idea to verified implementation.",
-                        games: "Connect the worlds you’re building.",
-                        reviews: "You have the final say on every change.",
-                        logs: "A clear view of everything happening in your studio.",
-                        settings: "Make this workspace your own.",
-                        library:
-                          "A reference shelf for you and your development team.",
-                      } as any
-                    )[page]}
+                {
+                  (
+                    {
+                      home: "Requests, agents and Studio connections.",
+                      chat: "Plan changes with Lead and review the results.",
+                      team: "Configure agent models, tools and instructions.",
+                      tasks: "Inspect work, dependencies and failures.",
+                      games: "Manage local Roblox Studio targets.",
+                      reviews: "Approve tool calls and accept verified work.",
+                      logs: "Inspect worker events and API usage.",
+                      settings: "Connections, spending limits and appearance.",
+                      library:
+                        "Search official documentation and personal references.",
+                    } as Record<string, string>
+                  )[page]
+                }
               </p>
             </div>
             <Button
@@ -398,7 +556,10 @@ export default function Studio({ page }: { page: string }) {
             </div>
           )}
           {notice && (
-            <div role="status" className="alert">
+            <div
+              role={noticeError ? "alert" : "status"}
+              className={`alert ${noticeError ? "error" : "success"}`}
+            >
               <span>{notice}</span>
               <button
                 aria-label="Dismiss notification"
@@ -428,7 +589,7 @@ export default function Studio({ page }: { page: string }) {
                 <div className="panel-heading">
                   <h3>
                     <Avatar name="Lead" size="mini" /> Lead{" "}
-                    <span className="subtle">Your orchestrator</span>
+                    <span className="subtle">Task orchestrator</span>
                   </h3>
                   <Badge
                     value={data.keyConfigured ? "ready" : "not configured"}
@@ -453,8 +614,8 @@ export default function Studio({ page }: { page: string }) {
                   ) : (
                     <Empty
                       icon={<Sparkles />}
-                      title="Let’s make something worth playing."
-                      text="Describe what you want to build. Lead will break it down and bring in the right specialists."
+                      title="No conversation yet"
+                      text="Select a target game and describe a change, including acceptance criteria."
                     />
                   )}
                 </div>
@@ -609,7 +770,11 @@ export default function Studio({ page }: { page: string }) {
                       t.title.toLowerCase().includes(query.toLowerCase()),
                   )
                   .map((t) => (
-                    <details key={t.id} className="task-detail">
+                    <details
+                      key={t.id}
+                      id={`task-${t.id}`}
+                      className="task-detail"
+                    >
                       <summary>
                         <TaskRow t={t} />
                       </summary>
@@ -693,7 +858,7 @@ export default function Studio({ page }: { page: string }) {
                   <section className="panel">
                     <Empty
                       icon={<Gamepad2 />}
-                      title="Your next world belongs here"
+                      title="No games registered"
                       text="Connect the official Studio MCP server, discover an instance, and register it below."
                     />
                   </section>
@@ -941,15 +1106,32 @@ export default function Studio({ page }: { page: string }) {
           )}
           {page === "library" && <Library />}
           {data && page === "settings" && (
-            <SettingsForm data={data} busy={busy} act={act} />
+            <>
+              <Appearance
+                preferences={preferences}
+                update={updatePreferences}
+                data={data}
+              />
+              <SettingsForm data={data} busy={busy} act={act} />
+            </>
           )}
           <footer className="footer">
             <span>
-              <Flame size={13} /> Forge Studio <span className="subtle">/</span>{" "}
-              Built for the worlds you imagine.
+              <Terminal size={12} /> forge / {page}
+              <span className="footer-separator">|</span>
+              <span
+                className={`dot ${connection === "live" ? "green" : "amber"}`}
+              />
+              {connection === "live" ? "live events" : "polling"}
             </span>
+            <button onClick={() => setShortcutsOpen(true)}>
+              Ctrl+K launcher <span className="footer-separator">|</span> ?
+              shortcuts
+            </button>
             <span>
-              <span className="dot green" /> Local workspace · 3 worker limit
+              {data
+                ? `${running.length}/3 workers · $${data.spend.cost.toFixed(4)} used`
+                : "Worker unavailable"}
             </span>
           </footer>
         </main>

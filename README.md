@@ -1,6 +1,8 @@
 # Forge Studio
 
-A local-first Roblox AI development studio built with Next.js, TypeScript, Tailwind CSS, shadcn/ui-compatible Radix button components, SQLite, LangGraph.js, and the official MCP TypeScript SDK. Original dark workspace design informed by the published Home and Lead product screenshots at [roautomation.dev](https://roautomation.dev). Reference artwork and branding are not bundled.
+A local-first Roblox AI development studio built with Next.js, TypeScript, Tailwind CSS, shadcn/ui-compatible Radix button components, SQLite, LangGraph.js, and the official MCP TypeScript SDK. Desktop workspace inspired by Hyprland tiling, Waybar status modules and KDE application conventions. See [design research and decisions](docs/DESIGN.md).
+
+![Forge desktop workspace with task queue and agent status](artifacts/overview-desktop.png)
 
 ## Start here
 
@@ -39,7 +41,7 @@ Suggested first request: “Add a server-side checkpoint system to my obby. Pres
 
 ## Runtime architecture
 
-- **Next.js** serves eight responsive dashboard pages and a same-origin API proxy. All privileged operations go through the local worker. No browser-bundled API keys.
+- **Next.js** serves nine responsive dashboard pages and a same-origin API proxy. All privileged operations go through the local worker. No browser-bundled API keys.
 - **Worker** (`worker/index.ts`) binds to `127.0.0.1:4318`. Authenticated HTTP uses a random 0600 local token, and WebSocket broadcasts only refresh notifications. The UI fetches protected snapshots through Next. HTTP polling is the fallback. `WORKER_PORT` is configurable; restart both processes when changing it.
 - **Seven independent agents** each have isolated prompts, persistent memory, conversation/tool context, role-based tools, task histories and execution cycles. Lead delegates; Architect designs; Builder codes Luau; Frame builds UI; Scenic builds worlds; Balance tunes economies; Tester checks behavior. Every model turn is a genuine separate OpenRouter request; there is no production simulator or seeded activity.
 - **LangGraph** runs reason/tool phases with persistent SQLite checkpoints per task thread. Task messages and tool outcomes are separately persisted to support partial tool batches and restart recovery. The SQLite dependency scheduler runs at most three workers concurrently and one task per agent. Dependencies, retries with backoff, handoffs, blocked-task recovery, step limits and user review are durable.
@@ -69,11 +71,12 @@ npm run build
 npx playwright install chromium
 node scripts/smoke.mjs
 node scripts/ui-smoke.mjs
+node scripts/desktop-smoke.mjs
 ```
 
 The integration test replaces **only model responses** with deterministic test responses and launches a **test-only MCP stdio server** through the actual SDK. It verifies Lead delegation → queued Builder → approval before file modification → independent Tester read/play/console evidence → user review, plus budget reservations, unauthorized-tool rejection and restart recovery. The test does not spend OpenRouter credit and is not a real Roblox playtest.
 
-Browser smoke checks visit all eight pages, check console errors and mobile overflow, and write desktop/mobile screenshots to `artifacts/`. The extended UI check covers 1440px, 768px and 390px layouts, quick prompts, Ctrl/Cmd+K navigation, Escape handling, and agent selection during live refreshes. Its approval-state fixture stays in browser request interception and never enters the application database.
+Browser smoke checks visit all nine pages, check console errors and mobile overflow, and write desktop/mobile screenshots to `artifacts/`. The extended UI check covers 1440px, 768px and 390px layouts, quick prompts, Ctrl/Cmd+K navigation, Escape handling, and agent selection during live refreshes. Its approval-state fixture stays in browser request interception and never enters the application database.
 
 The dashboard includes a compact Lead request bar, actionable setup and approval cards, live agent rows, game progress and budget tracking. Search pages, agents and tasks with **Ctrl/Cmd+K**. The selected game persists across pages and reloads. Geist is served locally under its included SIL Open Font License (`public/fonts/OFL.txt`).
 
@@ -94,3 +97,11 @@ The dashboard includes a compact Lead request bar, actionable setup and approval
 Open **Library** in the sidebar to browse 31 attributed official Roblox guides covering security, data, Luau, networking, performance, UI, world building, design, economy and release workflows. Search article text and code, bookmark references, or open a guide to read its practical do/don’t notes and offline source text. Add your own guides, source links, Markdown files and images with **Add reference**. All seven agents can consult this library while working. Personal references stay in `.data/forge.sqlite`.
 
 For source attribution, licensing and optional Python refresh instructions, see [library/README.md](library/README.md). The bundled pack works on Windows without installing Python; Python is needed only to scrape a newer source pack.
+
+## Desktop workspace
+
+Forge now uses a desktop-style workspace with numbered page tabs, compact work panes and a persistent status bar. In **Settings → Workspace appearance**, choose **Nord**, **Graphite** or **Evergreen**, select compact/comfortable density, and toggle focus mode. These preferences are saved on the current browser.
+
+**Alt+1…9** switches pages, **Alt+F** toggles navigation, **Ctrl/Cmd+K** opens the launcher, and **?** shows shortcuts. Workspace shortcuts do not run while editing text. Launcher task results open the matching task inspector. Failed and blocked tasks also appear in the workspace recovery pane.
+
+Use **Download diagnostics** in the sidebar or Settings to save connection status, model configuration flags, task counts and spending totals for troubleshooting. The export excludes credentials, prompts and messages. See [docs/DESIGN.md](docs/DESIGN.md) for the design rationale and research sources.

@@ -87,6 +87,7 @@ export default function Library() {
       setArticle(a);
       setEditing(null);
       setError("");
+      document.querySelector(".main")?.scrollTo({ top: 0 });
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
       setError(String(e));
@@ -135,10 +136,8 @@ export default function Library() {
     <div className="reference-library">
       <div className="library-intro">
         <div>
-          <span className="section-kicker">
-            KNOWLEDGE THAT BUILDS BETTER GAMES
-          </span>
-          <h2>Your team’s reference shelf.</h2>
+          <span className="section-kicker">Reference index</span>
+          <h2>Development library</h2>
           <p>
             Official guides, practical do’s and don’ts, and the knowledge you
             collect along the way.
@@ -188,7 +187,7 @@ export default function Library() {
           </button>
           <div className="library-agent-note">
             <BookOpen size={19} />
-            <strong>Shared with your team</strong>
+            <strong>Agent access</strong>
             <p>
               All seven agents can search these guides and read them during
               tasks. References are consulted on demand, keeping model context
@@ -214,7 +213,7 @@ export default function Library() {
               }}
             >
               <div className="panel-heading">
-                <h3>{editing.id ? "Edit reference" : "Add to your library"}</h3>
+                <h3>{editing.id ? "Edit reference" : "Add reference"}</h3>
                 <Button
                   type="button"
                   variant="ghost"
