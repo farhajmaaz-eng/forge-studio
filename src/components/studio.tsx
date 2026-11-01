@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import {
   Activity,
+  BookOpen,
   Search,
   RefreshCw,
   LayoutGrid,
@@ -37,6 +38,7 @@ import { Button } from "@/components/ui/button";
 import { roles, type Role } from "@/lib/roles";
 import { Avatar } from "./agent-avatar";
 import Overview from "./overview";
+import Library from "./library";
 import CommandPalette from "./command-palette";
 const nav = [
   ["home", "Overview", Home],
@@ -45,6 +47,7 @@ const nav = [
   ["tasks", "Task board", ListTodo],
   ["games", "Games", Gamepad2],
   ["reviews", "Reviews", ShieldCheck],
+  ["library", "Library", BookOpen],
   ["logs", "Activity logs", Terminal],
   ["settings", "Settings", Settings],
 ] as const;
@@ -374,6 +377,8 @@ export default function Studio({ page }: { page: string }) {
                         reviews: "You have the final say on every change.",
                         logs: "A clear view of everything happening in your studio.",
                         settings: "Make this workspace your own.",
+                        library:
+                          "A reference shelf for you and your development team.",
                       } as any
                     )[page]}
               </p>
@@ -934,6 +939,7 @@ export default function Studio({ page }: { page: string }) {
               </section>
             </>
           )}
+          {page === "library" && <Library />}
           {data && page === "settings" && (
             <SettingsForm data={data} busy={busy} act={act} />
           )}

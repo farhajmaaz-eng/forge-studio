@@ -24,7 +24,7 @@ async function proxy(
       "utf8",
     );
     const r = await fetch(
-      `http://127.0.0.1:${process.env.WORKER_PORT || 4318}/${path.map(encodeURIComponent).join("/")}`,
+      `http://127.0.0.1:${process.env.WORKER_PORT || 4318}/${path.map(encodeURIComponent).join("/")}${req.nextUrl.search}`,
       {
         method: req.method,
         headers: {

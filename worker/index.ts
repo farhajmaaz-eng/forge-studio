@@ -8,6 +8,7 @@ import { studio } from "./mcp";
 import { active, recover, tick } from "./runtime";
 import { refreshModels } from "./model";
 import { roles } from "../src/lib/roles";
+import { librarySearch, libraryRead, libraryAction } from "./library";
 let connecting = false;
 async function reconnect() {
   if (connecting) throw new Error("Connection already in progress");
@@ -21,6 +22,7 @@ async function reconnect() {
   }
 }
 async function action(path: string, b: any) {
+  if (path.startsWith("library/")) return libraryAction(path.slice(8), b);
   if (path === "chat") {
     const a = z
       .object({
@@ -223,7 +225,22 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   try {
-    const path = (req.url || "/").slice(1);
+    const url = new URL(req.url || "/", "http://localhost");
+    const path = url.pathname.slice(1);
+    if (req.method === "GET" && path === "library") {
+      res.end(
+        JSON.stringify(
+          url.searchParams.has("id")
+            ? libraryRead(url.searchParams.get("id")!)
+            : librarySearch(
+                url.searchParams.get("q") || "",
+                url.searchParams.get("category") || "",
+                url.searchParams.get("starred") === "true",
+              ),
+        ),
+      );
+      return;
+    }
     if (req.method === "GET" && path === "snapshot") {
       res.end(
         JSON.stringify({

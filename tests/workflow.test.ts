@@ -21,7 +21,13 @@ vi.mock("../worker/model", () => ({
   completion: vi.fn(async (a: any, t: any, m: any[]) => {
     const outputs = m.filter((x) => x.role === "tool");
     if (a.name === "Lead") {
-      if (!outputs.length)
+      if (!outputs.length) return call("library_search", { query: "security" });
+      if (outputs.length === 1)
+        return call("library_read", {
+          id: JSON.parse(outputs[0].content)[0].id,
+        });
+
+      if (outputs.length === 2)
         return call("delegate", {
           agent: "Builder",
           title: "Build checkpoint",
@@ -115,6 +121,15 @@ describe("Persistent local workflow", () => {
       )
         break;
     }
+    expect(
+      (
+        store.db
+          .prepare(
+            "SELECT count(*) AS n FROM tool_calls WHERE tool='library_read' AND status='done'",
+          )
+          .get() as any
+      ).n,
+    ).toBe(1);
     expect(approvals).toBe(3);
     expect(readFileSync(process.env.FIXTURE_PLACE!, "utf8")).toContain(
       "Checkpoint",

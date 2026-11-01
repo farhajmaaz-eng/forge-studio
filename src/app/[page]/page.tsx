@@ -7,9 +7,16 @@ export default async function Page({
 }) {
   const { page } = await params;
   if (
-    !["chat", "team", "tasks", "games", "reviews", "logs", "settings"].includes(
-      page,
-    )
+    ![
+      "chat",
+      "team",
+      "tasks",
+      "games",
+      "reviews",
+      "library",
+      "logs",
+      "settings",
+    ].includes(page)
   )
     notFound();
   return <Studio page={page} />;

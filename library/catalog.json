@@ -1,0 +1,616 @@
+[
+  {
+    "path": "scripting/security/client-server-boundary",
+    "title": "Secure the client/server boundary",
+    "category": "Security",
+    "agents": [
+      "Architect",
+      "Builder",
+      "Tester"
+    ],
+    "summary": "Treat every remote call as an untrusted request. The server decides what the player is allowed to do.",
+    "do": [
+      "Validate types, bounds, permissions and rate limits before work.",
+      "Compute rewards and damage from server-owned state."
+    ],
+    "avoid": [
+      "Do not accept a client-supplied currency balance.",
+      "Do not treat a UI cooldown as a security boundary."
+    ],
+    "diagram": "security"
+  },
+  {
+    "path": "scripting/security/access-control",
+    "title": "Keep authority and secrets on the server",
+    "category": "Security",
+    "agents": [
+      "Architect",
+      "Builder"
+    ],
+    "summary": "Separate shared presentation from privileged game rules and credentials.",
+    "do": [
+      "Keep server-only modules in server containers.",
+      "Review what replicates to players."
+    ],
+    "avoid": [
+      "Do not place secrets in replicated modules.",
+      "Do not trust obfuscated client code to protect valuable logic."
+    ],
+    "diagram": "security"
+  },
+  {
+    "path": "scripting/security/defensive-design",
+    "title": "Design systems that resist abuse",
+    "category": "Security",
+    "agents": [
+      "Lead",
+      "Architect",
+      "Builder",
+      "Tester"
+    ],
+    "summary": "Prevent impossible actions by designing narrow server APIs and explicit invariants.",
+    "do": [
+      "Define legal transitions before implementing remotes.",
+      "Test repeated and out-of-order requests."
+    ],
+    "avoid": [
+      "Do not add trust checks only after an exploit report.",
+      "Do not let one request perform unbounded work."
+    ],
+    "diagram": "security"
+  },
+  {
+    "path": "scripting/security/third-party-vulnerabilities",
+    "title": "Audit third-party assets and scripts",
+    "category": "Security",
+    "agents": [
+      "Builder",
+      "Scenic",
+      "Tester"
+    ],
+    "summary": "Treat imported models and packages as code dependencies that need inspection.",
+    "do": [
+      "Inspect scripts and dependencies before insertion.",
+      "Keep a saved place version before major imports."
+    ],
+    "avoid": [
+      "Do not run unknown loader scripts blindly.",
+      "Do not assume a popular asset is automatically safe."
+    ],
+    "diagram": "security"
+  },
+  {
+    "path": "cloud-services/data-stores/best-practices",
+    "title": "Build reliable player data storage",
+    "category": "Data & architecture",
+    "agents": [
+      "Architect",
+      "Builder",
+      "Tester"
+    ],
+    "summary": "Plan records, concurrent updates, retries and recovery before shipping progression.",
+    "do": [
+      "Keep related persistent values together when they must change atomically.",
+      "Handle failed requests explicitly and observe failures."
+    ],
+    "avoid": [
+      "Do not overwrite a failed load with a fresh default profile.",
+      "Do not assume every storage operation succeeds."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "cloud-services/data-stores/error-codes-and-limits",
+    "title": "Handle storage errors and budgets",
+    "category": "Data & architecture",
+    "agents": [
+      "Builder",
+      "Tester"
+    ],
+    "summary": "Read current limits and error meanings when designing persistence.",
+    "do": [
+      "Use bounded retry policies and watch request budgets.",
+      "Exercise failure handling in a separate test environment."
+    ],
+    "avoid": [
+      "Do not retry forever in a tight loop.",
+      "Do not copy numeric limits into a design without checking the source."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "cloud-services/data-stores/versioning-listing-and-caching",
+    "title": "Understand data versions and caching",
+    "category": "Data & architecture",
+    "agents": [
+      "Architect",
+      "Builder"
+    ],
+    "summary": "Use documented version and cache behavior to plan recovery and consistency.",
+    "do": [
+      "Document which reads may be cached.",
+      "Plan and rehearse recovery from a bad data release."
+    ],
+    "avoid": [
+      "Do not assume a repeated read always reaches the backend.",
+      "Do not treat application-level undo as a complete backup."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "scripting/events/remote",
+    "title": "Choose remote events and callbacks",
+    "category": "Luau & networking",
+    "agents": [
+      "Architect",
+      "Builder"
+    ],
+    "summary": "Choose communication patterns based on whether a response is required.",
+    "do": [
+      "Keep message payloads small and well defined.",
+      "Validate requests at the receiving boundary."
+    ],
+    "avoid": [
+      "Do not block unrelated work waiting on unnecessary callbacks.",
+      "Do not send whole instance hierarchies when identifiers will do."
+    ],
+    "diagram": "security"
+  },
+  {
+    "path": "scripting/events/index",
+    "title": "Prefer event-driven systems",
+    "category": "Luau & networking",
+    "agents": [
+      "Builder",
+      "Architect"
+    ],
+    "summary": "React to meaningful changes instead of continuously polling everything.",
+    "do": [
+      "Disconnect event connections when their owner is destroyed.",
+      "Keep event handlers focused and bounded."
+    ],
+    "avoid": [
+      "Do not accumulate duplicate listeners after respawns.",
+      "Do not scan the entire world every frame."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "workspace/streaming/index",
+    "title": "Build worlds that support streaming",
+    "category": "World building",
+    "agents": [
+      "Architect",
+      "Scenic",
+      "Builder",
+      "Tester"
+    ],
+    "summary": "Design clients to handle instances arriving and leaving as the world streams.",
+    "do": [
+      "Handle missing and streamed-out instances.",
+      "Test travel and respawn across distant areas."
+    ],
+    "avoid": [
+      "Do not assume every workspace descendant exists on each client.",
+      "Do not force the whole map to remain loaded by default."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "workspace/streaming/techniques",
+    "title": "Use streaming techniques deliberately",
+    "category": "World building",
+    "agents": [
+      "Scenic",
+      "Builder"
+    ],
+    "summary": "Choose model behavior and loading strategies around actual gameplay needs.",
+    "do": [
+      "Group meaningful world units and test their behavior.",
+      "Use focused loading strategies for critical interactions."
+    ],
+    "avoid": [
+      "Do not apply persistence settings to every model.",
+      "Do not hide loading problems only on a powerful desktop."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "characters/pathfinding",
+    "title": "Design robust NPC navigation",
+    "category": "World building",
+    "agents": [
+      "Builder",
+      "Scenic",
+      "Tester"
+    ],
+    "summary": "Navigation needs replanning, failure handling and a world built for traversable routes.",
+    "do": [
+      "Handle blocked paths and unavailable routes.",
+      "Test stairs, obstacles and moving targets."
+    ],
+    "avoid": [
+      "Do not recompute every NPC path every frame.",
+      "Do not assume a computed route can never become blocked."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "performance-optimization/design",
+    "title": "Design for constrained devices",
+    "category": "Performance",
+    "agents": [
+      "Architect",
+      "Builder",
+      "Scenic",
+      "Frame"
+    ],
+    "summary": "Set a baseline device and measure memory, scene complexity and script cost early.",
+    "do": [
+      "Reuse assets and keep replicated content intentional.",
+      "Prefer event-driven work and clean up connections."
+    ],
+    "avoid": [
+      "Do not put all game assets in ReplicatedStorage.",
+      "Do not optimize only for a development workstation."
+    ],
+    "diagram": "performance"
+  },
+  {
+    "path": "performance-optimization/identify",
+    "title": "Identify the real performance bottleneck",
+    "category": "Performance",
+    "agents": [
+      "Tester",
+      "Builder",
+      "Scenic"
+    ],
+    "summary": "Measure the slow subsystem before changing code or art.",
+    "do": [
+      "Capture measurements in a repeatable scenario.",
+      "Separate CPU, rendering, network and memory symptoms."
+    ],
+    "avoid": [
+      "Do not use guesswork as evidence of an optimization.",
+      "Do not compare two different scenes as a benchmark."
+    ],
+    "diagram": "performance"
+  },
+  {
+    "path": "performance-optimization/improve",
+    "title": "Improve frame rate and loading",
+    "category": "Performance",
+    "agents": [
+      "Builder",
+      "Scenic",
+      "Frame"
+    ],
+    "summary": "Use the measured bottleneck to choose targeted improvements.",
+    "do": [
+      "Keep initial content lean and defer optional work.",
+      "Measure before and after each significant change."
+    ],
+    "avoid": [
+      "Do not preload the entire game as a default.",
+      "Do not replicate cosmetic work that can stay local."
+    ],
+    "diagram": "performance"
+  },
+  {
+    "path": "performance-optimization/microprofiler/index",
+    "title": "Read the MicroProfiler",
+    "category": "Performance",
+    "agents": [
+      "Builder",
+      "Tester"
+    ],
+    "summary": "Use frame timing evidence to understand stalls and expensive work.",
+    "do": [
+      "Profile representative play sessions.",
+      "Investigate spikes as well as averages."
+    ],
+    "avoid": [
+      "Do not conclude performance is good from average FPS alone.",
+      "Do not leave heavy debug instrumentation enabled unnecessarily."
+    ],
+    "diagram": "performance"
+  },
+  {
+    "path": "studio/testing-modes",
+    "title": "Test multiplayer behavior in Studio",
+    "category": "Testing & release",
+    "agents": [
+      "Tester",
+      "Builder",
+      "Lead"
+    ],
+    "summary": "Use the appropriate Studio test mode and inspect both client and server behavior.",
+    "do": [
+      "Run multi-client tests for shared-state features.",
+      "Check output, respawn and disconnect scenarios."
+    ],
+    "avoid": [
+      "Do not declare multiplayer ready after a single solo run.",
+      "Do not use an implementation summary as test evidence."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "production/publishing/accessibility",
+    "title": "Make the game accessible",
+    "category": "UI & accessibility",
+    "agents": [
+      "Frame",
+      "Tester",
+      "Lead"
+    ],
+    "summary": "Make interactions understandable and usable across different player needs.",
+    "do": [
+      "Provide readable text, clear feedback and redundant cues.",
+      "Review contrast and avoid relying on color alone."
+    ],
+    "avoid": [
+      "Do not make essential information available only through audio.",
+      "Do not use motion or visual noise that obscures gameplay."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "ui/size-modifiers",
+    "title": "Make UI adapt to different screens",
+    "category": "UI & accessibility",
+    "agents": [
+      "Frame",
+      "Tester"
+    ],
+    "summary": "Combine layout constraints and scaling so interfaces remain usable on real devices.",
+    "do": [
+      "Check narrow screens and large text.",
+      "Use consistent layout rules instead of positioning each element independently."
+    ],
+    "avoid": [
+      "Do not assume a fixed desktop resolution.",
+      "Do not shrink every label until it fits."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "input/mobile",
+    "title": "Design useful mobile controls",
+    "category": "UI & accessibility",
+    "agents": [
+      "Frame",
+      "Builder",
+      "Tester"
+    ],
+    "summary": "Treat touch input as a primary interaction model with its own constraints.",
+    "do": [
+      "Test touch targets on devices and avoid control overlap.",
+      "Consider orientation and screen-safe areas."
+    ],
+    "avoid": [
+      "Do not rely on hover for essential actions.",
+      "Do not crowd the movement and camera control areas."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "input/gamepad",
+    "title": "Support controller navigation",
+    "category": "UI & accessibility",
+    "agents": [
+      "Frame",
+      "Builder",
+      "Tester"
+    ],
+    "summary": "Make focus, selection and feedback clear for players using controllers.",
+    "do": [
+      "Provide visible focus and predictable navigation.",
+      "Test prompts and menus with a controller."
+    ],
+    "avoid": [
+      "Do not require a mouse to dismiss a mandatory dialog.",
+      "Do not lose focus when panels change."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "production/game-design/core-loops",
+    "title": "Build a satisfying core loop",
+    "category": "Game design",
+    "agents": [
+      "Lead",
+      "Architect",
+      "Balance"
+    ],
+    "summary": "Identify the repeated action, feedback and motivation that carry the experience.",
+    "do": [
+      "Prototype the central action early.",
+      "Make the result of an action legible and rewarding."
+    ],
+    "avoid": [
+      "Do not add many systems before the main interaction works.",
+      "Do not confuse a list of features with a playable loop."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "production/game-design/onboarding",
+    "title": "Help players understand the first session",
+    "category": "Game design",
+    "agents": [
+      "Lead",
+      "Frame",
+      "Balance",
+      "Tester"
+    ],
+    "summary": "Teach the minimum needed to reach meaningful play and a clear next goal.",
+    "do": [
+      "Observe where new players become confused.",
+      "Introduce mechanics when players can use them."
+    ],
+    "avoid": [
+      "Do not front-load every rule in a wall of text.",
+      "Do not make players wait through a long introduction before acting."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "production/game-design/onboarding-techniques",
+    "title": "Teach through interaction",
+    "category": "Game design",
+    "agents": [
+      "Lead",
+      "Frame",
+      "Tester"
+    ],
+    "summary": "Choose teaching techniques that support the experience and the player\u2019s immediate goal.",
+    "do": [
+      "Use timely feedback and simple early tasks.",
+      "Test with someone who has never seen the game."
+    ],
+    "avoid": [
+      "Do not assume the developer\u2019s knowledge is obvious to newcomers.",
+      "Do not block progress with unclear instructions."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "production/game-design/balance-virtual-economies",
+    "title": "Balance sources, sinks and progression",
+    "category": "Economy & live ops",
+    "agents": [
+      "Balance",
+      "Architect",
+      "Tester"
+    ],
+    "summary": "Model how value enters and leaves the economy across new and experienced players.",
+    "do": [
+      "Track currency sources and sinks.",
+      "Test progression under multiple player behaviors."
+    ],
+    "avoid": [
+      "Do not tune rewards from one idealized playthrough.",
+      "Do not inflate rewards without considering long-term accumulation."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "production/game-design/monetization-foundations",
+    "title": "Design monetization around player value",
+    "category": "Economy & live ops",
+    "agents": [
+      "Lead",
+      "Balance",
+      "Frame"
+    ],
+    "summary": "Plan purchases as part of a coherent experience and review current platform requirements.",
+    "do": [
+      "Make offers understandable and relevant.",
+      "Evaluate how purchases affect game balance."
+    ],
+    "avoid": [
+      "Do not obscure what a player is buying.",
+      "Do not assume every game benefits from the same monetization pattern."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "production/monetization/developer-products",
+    "title": "Implement repeatable purchases correctly",
+    "category": "Economy & live ops",
+    "agents": [
+      "Builder",
+      "Balance",
+      "Tester"
+    ],
+    "summary": "Separate purchase prompts from durable server-side fulfillment.",
+    "do": [
+      "Follow the current receipt-processing contract.",
+      "Make fulfillment resilient to repeated delivery and failures."
+    ],
+    "avoid": [
+      "Do not grant items just because a purchase prompt closed.",
+      "Do not treat the client as the payment authority."
+    ],
+    "diagram": "security"
+  },
+  {
+    "path": "production/analytics/economy-events",
+    "title": "Measure the in-game economy",
+    "category": "Economy & live ops",
+    "agents": [
+      "Balance",
+      "Lead"
+    ],
+    "summary": "Use economy instrumentation to investigate value flow and player progression.",
+    "do": [
+      "Give events consistent names and useful context.",
+      "Compare player segments and progression stages."
+    ],
+    "avoid": [
+      "Do not collect events without a question they can answer.",
+      "Do not infer an entire economy from a global average."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "production/analytics/retention",
+    "title": "Understand retention without guessing",
+    "category": "Economy & live ops",
+    "agents": [
+      "Lead",
+      "Balance"
+    ],
+    "summary": "Use cohorts and repeat behavior to evaluate whether players return.",
+    "do": [
+      "Compare cohorts after a specific product change.",
+      "Pair metrics with observed player experience."
+    ],
+    "avoid": [
+      "Do not confuse acquisition spikes with retention improvements.",
+      "Do not infer causation from one noisy day."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "production/game-design/content-updates",
+    "title": "Plan sustainable content updates",
+    "category": "Testing & release",
+    "agents": [
+      "Lead",
+      "Architect",
+      "Balance"
+    ],
+    "summary": "Treat updates as a repeatable production and learning cycle.",
+    "do": [
+      "Scope changes around player value and delivery capacity.",
+      "Plan QA and monitoring before release."
+    ],
+    "avoid": [
+      "Do not ship unrelated risky changes as one untraceable bundle.",
+      "Do not expand the live scope faster than the team can maintain."
+    ],
+    "diagram": "workflow"
+  },
+  {
+    "path": "production/game-design/liveops-essentials",
+    "title": "Operate and improve a live game",
+    "category": "Economy & live ops",
+    "agents": [
+      "Lead",
+      "Balance",
+      "Tester"
+    ],
+    "summary": "Plan ongoing operation around evidence, reliable updates and player expectations.",
+    "do": [
+      "Set a sustainable cadence and watch player feedback.",
+      "Prepare operational checklists for time-sensitive events."
+    ],
+    "avoid": [
+      "Do not make every update depend on a last-minute manual step.",
+      "Do not judge success only by launch-day attention."
+    ],
+    "diagram": "workflow"
+  }
+]

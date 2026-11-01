@@ -88,3 +88,9 @@ The dashboard includes a compact Lead request bar, actionable setup and approval
 - LangGraph persistence: https://docs.langchain.com/oss/javascript/langgraph/persistence
 - OpenRouter model catalog: https://openrouter.ai/api/v1/models
 - OpenRouter usage accounting: https://openrouter.ai/docs/use-cases/usage-accounting
+
+## Library
+
+Open **Library** in the sidebar to browse 31 attributed official Roblox guides covering security, data, Luau, networking, performance, UI, world building, design, economy and release workflows. Search article text and code, bookmark references, or open a guide to read its practical do/don’t notes and offline source text. Add your own guides, source links, Markdown files and images with **Add reference**. All seven agents can consult this library while working. Personal references stay in `.data/forge.sqlite`.
+
+For source attribution, licensing and optional Python refresh instructions, see [library/README.md](library/README.md). The bundled pack works on Windows without installing Python; Python is needed only to scrape a newer source pack.
