@@ -1,6 +1,6 @@
 # Forge Studio
 
-A local-first Roblox AI development studio built with Next.js, TypeScript, Tailwind CSS, shadcn/ui-compatible Radix button components, SQLite, LangGraph.js, and the official MCP TypeScript SDK. Desktop workspace inspired by Hyprland tiling, Waybar status modules and KDE application conventions. See [design research and decisions](docs/DESIGN.md).
+A local-first Roblox AI development studio built with Next.js, TypeScript, Tailwind CSS, shadcn/ui-compatible Radix button components, SQLite, LangGraph.js, and the official MCP TypeScript SDK. Compact dark workspace with a project toolbar, agent navigation, grouped reviews, and responsive layouts based on the supplied design reference. See [design decisions](docs/DESIGN.md).
 
 ![Forge desktop workspace with task queue and agent status](artifacts/overview-desktop.png)
 
@@ -72,11 +72,13 @@ npx playwright install chromium
 node scripts/smoke.mjs
 node scripts/ui-smoke.mjs
 node scripts/desktop-smoke.mjs
+node scripts/library-smoke.mjs
+node scripts/redesign-smoke.mjs
 ```
 
 The integration test replaces **only model responses** with deterministic test responses and launches a **test-only MCP stdio server** through the actual SDK. It verifies Lead delegation → queued Builder → approval before file modification → independent Tester read/play/console evidence → user review, plus budget reservations, unauthorized-tool rejection and restart recovery. The test does not spend OpenRouter credit and is not a real Roblox playtest.
 
-Browser smoke checks visit all nine pages, check console errors and mobile overflow, and write desktop/mobile screenshots to `artifacts/`. The extended UI check covers 1440px, 768px and 390px layouts, quick prompts, Ctrl/Cmd+K navigation, Escape handling, and agent selection during live refreshes. Its approval-state fixture stays in browser request interception and never enters the application database.
+Browser smoke checks visit all nine pages, check console errors and mobile overflow, and write desktop/mobile screenshots to `artifacts/`. The extended UI check covers 1440px, 768px and 390px layouts, quick prompts, Ctrl/Cmd+K navigation, Escape handling, and agent selection during live refreshes. Approval-state fixtures stay in browser request interception and never enter the application database. The redesign check additionally covers populated reviews from 320px to 1540px, partial batch failures, rejection cancellation, media inspection, revision feedback, acceptance, uncertain-operation recovery, and mobile navigation.
 
 The dashboard includes a compact Lead request bar, actionable setup and approval cards, live agent rows, game progress and budget tracking. Search pages, agents and tasks with **Ctrl/Cmd+K**. The selected game persists across pages and reloads. Geist is served locally under its included SIL Open Font License (`public/fonts/OFL.txt`).
 
@@ -100,8 +102,8 @@ For source attribution, licensing and optional Python refresh instructions, see 
 
 ## Desktop workspace
 
-Forge now uses a desktop-style workspace with numbered page tabs, compact work panes and a persistent status bar. In **Settings → Workspace appearance**, choose **Nord**, **Graphite** or **Evergreen**, select compact/comfortable density, and toggle focus mode. These preferences are saved on the current browser.
+Forge uses a near-black canvas, a persistent project toolbar, and a compact sidebar with real agent, task, review, and budget information. On phones, navigation opens in a keyboard-accessible drawer. Reviews group proposed changes and media deliverables, with detailed inspection, batch approvals, rejection confirmation, and revision feedback. In **Settings → Workspace appearance**, choose **Nord**, **Graphite** or **Evergreen**, select compact/comfortable density, and toggle focus mode. These preferences are saved on the current browser.
 
 **Alt+1…9** switches pages, **Alt+F** toggles navigation, **Ctrl/Cmd+K** opens the launcher, and **?** shows shortcuts. Workspace shortcuts do not run while editing text. Launcher task results open the matching task inspector. Failed and blocked tasks also appear in the workspace recovery pane.
 
-Use **Download diagnostics** in the sidebar or Settings to save connection status, model configuration flags, task counts and spending totals for troubleshooting. The export excludes credentials, prompts and messages. See [docs/DESIGN.md](docs/DESIGN.md) for the design rationale and research sources.
+Use **Download diagnostics** in the sidebar or Settings to save connection status, model configuration flags, task counts and spending totals for troubleshooting. The export excludes credentials, prompts and messages. See [docs/DESIGN.md](docs/DESIGN.md) for the design system, review behavior, and verification details.

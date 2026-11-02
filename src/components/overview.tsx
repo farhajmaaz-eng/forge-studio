@@ -10,7 +10,8 @@ import {
   Link2,
   ListTodo,
   ShieldCheck,
-  Terminal,
+  Sparkles,
+  Activity,
   Plus,
   Gamepad2,
 } from "lucide-react";
@@ -102,7 +103,7 @@ export default function Overview({
           <section className="panel request-pane">
             <div className="window-heading">
               <span>
-                <Terminal size={14} /> lead / new request
+                <Sparkles size={15} /> Ask your Lead
               </span>
               <span className="pane-meta">
                 {data.settings.paused
@@ -168,7 +169,7 @@ export default function Overview({
             <section className="panel setup-panel">
               <div className="window-heading">
                 <span>
-                  <Link2 size={14} /> connection setup
+                  <Link2 size={15} /> Get your studio ready
                 </span>
                 <span className="pane-meta">
                   {setup.filter((x) => x.ok).length}/3 connected
@@ -261,7 +262,7 @@ export default function Overview({
           <section className="panel work-panel">
             <div className="window-heading">
               <span>
-                <ListTodo size={14} /> task queue
+                <ListTodo size={15} /> Task queue
               </span>
               <Link href="/tasks">
                 Open board <ChevronRight size={13} />
@@ -314,7 +315,7 @@ export default function Overview({
           <section className="panel activity-panel">
             <div className="window-heading">
               <span>
-                <Terminal size={14} /> event log
+                <Activity size={15} /> Recent activity
               </span>
               <Link href="/logs">
                 View all <ChevronRight size={13} />
@@ -345,7 +346,7 @@ export default function Overview({
           <section className="panel team-live">
             <div className="window-heading">
               <span>
-                <span className="dot green" /> agents
+                <span className="dot green" /> Your team
               </span>
               <Link href="/team">
                 Configure <ChevronRight size={13} />
@@ -387,7 +388,7 @@ export default function Overview({
           <section className="panel game-progress-panel">
             <div className="window-heading">
               <span>
-                <Gamepad2 size={14} /> places
+                <Gamepad2 size={15} /> Your games
               </span>
               <Link href="/games" aria-label="Add game">
                 <Plus size={15} />
@@ -428,7 +429,7 @@ export default function Overview({
           </section>
           <section className="panel runtime-summary">
             <div className="window-heading">
-              <span>runtime / local</span>
+              <span>Workspace connections</span>
             </div>
             <dl>
               <div>

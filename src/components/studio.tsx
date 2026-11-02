@@ -2,32 +2,18 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useDesktopPreferences, downloadDiagnostics } from "@/lib/desktop";
+import { useDesktopPreferences } from "@/lib/desktop";
 import { Appearance, Shortcuts } from "./desktop-controls";
 import {
   Activity,
-  PanelLeft,
   Keyboard,
-  Palette,
-  Download,
-  Cpu,
-  BookOpen,
   Search,
-  RefreshCw,
-  LayoutGrid,
   ArrowRight,
   Box,
-  Check,
-  CheckCheck,
-  ChevronRight,
-  Flame,
   Gamepad2,
   Gauge,
   GitBranch,
-  Home,
   Link2,
-  ListTodo,
-  Loader2,
   MessageSquare,
   Pause,
   Play,
@@ -37,8 +23,6 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
-  Terminal,
-  Users,
   X,
   Zap,
 } from "lucide-react";
@@ -48,17 +32,9 @@ import { Avatar } from "./agent-avatar";
 import Overview from "./overview";
 import Library from "./library";
 import CommandPalette from "./command-palette";
-const nav = [
-  ["home", "Workspace", Home],
-  ["chat", "Lead Chat", MessageSquare],
-  ["team", "Agents", Users],
-  ["tasks", "Task board", ListTodo],
-  ["games", "Games", Gamepad2],
-  ["reviews", "Reviews", ShieldCheck],
-  ["library", "Library", BookOpen],
-  ["logs", "Activity logs", Terminal],
-  ["settings", "Settings", Settings],
-] as const;
+import WorkspaceShell, { navigation as nav } from "./workspace-shell";
+import Reviews from "./reviews";
+import { Skeleton } from "./ui/workspace-primitives";
 const money = (n: number) => `$${(n || 0).toFixed(4)}`;
 const date = (s: string) =>
   new Date(s.replace(" ", "T") + "Z").toLocaleTimeString([], {
@@ -76,22 +52,10 @@ export default function Studio({ page }: { page: string }) {
   const router = useRouter();
   const [preferences, updatePreferences] = useDesktopPreferences();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [clock, setClock] = useState("");
+  const [updatedAt, setUpdatedAt] = useState(0);
   const [noticeError, setNoticeError] = useState(false);
   const [focusedTaskId, setFocusedTaskId] = useState("");
   const [taskFocusVersion, setTaskFocusVersion] = useState(0);
-  useEffect(() => {
-    const refresh = () =>
-      setClock(
-        new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      );
-    refresh();
-    const timer = setInterval(refresh, 30000);
-    return () => clearInterval(timer);
-  }, []);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -151,6 +115,7 @@ export default function Studio({ page }: { page: string }) {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
       setData(d);
+      setUpdatedAt(Date.now());
       setError("");
     } catch (e) {
       setError(String(e));
@@ -288,66 +253,21 @@ export default function Studio({ page }: { page: string }) {
     </form>
   );
   return (
-    <div
-      className={`app page-${page} ${preferences.focus ? "focus-mode" : ""}`}
+    <WorkspaceShell
+      page={page}
+      data={data}
+      selectedGame={selectedGame}
+      chooseGame={chooseGame}
+      connection={connection}
+      updatedAt={updatedAt}
+      syncError={!!error}
+      refresh={load}
+      preferences={preferences}
+      updatePreferences={updatePreferences}
+      openSearch={() => setPaletteOpen(true)}
+      openShortcuts={() => setShortcutsOpen(true)}
+      selectAgent={setSelectedAgent}
     >
-      <a className="skip-link" href="#main-content">
-        Skip to content
-      </a>
-      <div className="desktop-bar">
-        <Link className="desktop-app-name" href="/">
-          <Terminal size={15} />
-          <strong>forge</strong>
-          <span>studio</span>
-        </Link>
-        <nav className="desktop-workspaces" aria-label="Workspace shortcuts">
-          {nav.map(([id, label], index) => (
-            <Link
-              href={id === "home" ? "/" : "/" + id}
-              key={id}
-              title={`${label} · Alt+${index + 1}`}
-              aria-label={`${label} workspace`}
-              aria-current={page === id ? "page" : undefined}
-            >
-              <span>{String(index + 1).padStart(2, "0")}</span>
-            </Link>
-          ))}
-        </nav>
-        <div className="desktop-tray">
-          <span className="desktop-worker">
-            <span
-              className={`dot ${data && Date.now() - data.settings.workerHeartbeat < 10000 ? "green" : "amber"}`}
-            />
-            {data && Date.now() - data.settings.workerHeartbeat < 10000
-              ? "worker online"
-              : "worker offline"}
-          </span>
-          <button
-            onClick={() => setShortcutsOpen(true)}
-            title="Keyboard shortcuts"
-            aria-label="Keyboard shortcuts"
-          >
-            <Keyboard size={15} />
-          </button>
-          <button
-            onClick={() =>
-              updatePreferences({
-                theme:
-                  preferences.theme === "nord"
-                    ? "graphite"
-                    : preferences.theme === "graphite"
-                      ? "evergreen"
-                      : "nord",
-              })
-            }
-            title={`Theme: ${preferences.theme}. Click to cycle.`}
-            aria-label="Cycle color scheme"
-          >
-            <Palette size={15} />
-          </button>
-          <time>{clock || "--:--"}</time>
-        </div>
-      </div>
       {shortcutsOpen && <Shortcuts close={() => setShortcutsOpen(false)} />}
       {paletteOpen && (
         <CommandPalette
@@ -370,773 +290,464 @@ export default function Studio({ page }: { page: string }) {
           }}
         />
       )}
-      <aside className="sidebar">
-        <Link href="/" className="brand">
-          <span className="brand-symbol">
-            <Flame size={24} />
-          </span>{" "}
-          forge<span className="brand-tag">/ local</span>
-        </Link>
-        <div className="workspace">
-          <span className="workspace-logo">F</span>
+      <main id="main-content">
+        <div className="page-title">
           <div>
-            Workspace<small>Local development</small>
-          </div>
-          <ChevronRight size={14} />
-        </div>
-        <button
-          className="workspace-search"
-          onClick={() => setPaletteOpen(true)}
-        >
-          <Search size={15} />
-          <span>Search or jump to…</span>
-          <kbd>Ctrl K</kbd>
-        </button>
-        <span className="nav-label">WORKSPACE</span>
-        <nav>
-          {nav.map(([id, label, Icon], index) => (
-            <Link
-              href={id === "home" ? "/" : "/" + id}
-              key={id}
-              aria-label={label}
-              aria-current={page === id ? "page" : undefined}
-              title={label}
-              className={page === id ? "nav-item active" : "nav-item"}
-            >
-              <Icon size={18} />
-              <span className="nav-text">{label}</span>
-              <kbd className="nav-key">{index + 1}</kbd>
-              {id === "reviews" && approvals.length > 0 && (
-                <span className="count">{approvals.length}</span>
-              )}
-            </Link>
-          ))}
-        </nav>
-        <div className="sidebar-team">
-          <span className="nav-label">
-            YOUR TEAM <span>07</span>
-          </span>
-          <div>
-            {Object.keys(roles).map((name) => (
-              <Link
-                href={`/team?agent=${name}`}
-                key={name}
-                title={name}
-                onClick={() => setSelectedAgent(name)}
-                aria-label={`Open ${name} agent`}
-              >
-                <Avatar
-                  name={name}
-                  size="mini"
-                  working={running.some((t) => t.agent === name)}
-                />
-              </Link>
-            ))}
-          </div>
-        </div>
-        <div className="sidebar-footer">
-          <button
-            className="sidebar-utility"
-            onClick={() => setShortcutsOpen(true)}
-          >
-            <Keyboard size={15} /> Keyboard shortcuts <kbd>?</kbd>
-          </button>
-          <button
-            className="sidebar-utility"
-            onClick={() => downloadDiagnostics(data)}
-          >
-            <Download size={15} /> Download diagnostics
-          </button>
-          <div className="sidebar-local">
-            <span className="dot green" /> localhost / personal workspace
-          </div>
-        </div>
-      </aside>
-      <div className="main">
-        <header className="topbar">
-          <div className="breadcrumb">
-            <button
-              className="icon-link focus-toggle"
-              aria-label={
-                preferences.focus ? "Show navigation" : "Hide navigation"
+            <h1>{page === "home" ? "Your workspace" : title}</h1>
+            <p>
+              {
+                (
+                  {
+                    home: "Requests, agents and Studio connections.",
+                    chat: "Plan changes with Lead and review the results.",
+                    team: "Configure agent models, tools and instructions.",
+                    tasks: "Inspect work, dependencies and failures.",
+                    games: "Manage local Roblox Studio targets.",
+                    reviews: "Approve tool calls and accept verified work.",
+                    logs: "Inspect worker events and API usage.",
+                    settings: "Connections, spending limits and appearance.",
+                    library:
+                      "Search official documentation and personal references.",
+                  } as Record<string, string>
+                )[page]
               }
-              title="Toggle navigation · Alt+F"
-              onClick={() => updatePreferences({ focus: !preferences.focus })}
-            >
-              <PanelLeft size={16} />
-            </button>
-            <div className="game-switcher">
-              <LayoutGrid size={15} />
-              <select
-                aria-label="Workspace game"
-                value={selectedGame}
-                onChange={(e) => chooseGame(e.target.value)}
-              >
-                <option value="">Select target game</option>
-                {data?.games.map((g: any) => (
-                  <option value={g.id} key={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <span className="breadcrumb-slash">/</span>
-            <span className="breadcrumb-page">{title}</span>
+            </p>
           </div>
-          <div className="topbar-right">
-            <span
-              className={`connection ${connection === "live" && data ? "is-live" : ""}`}
-            >
-              <span
-                className={`dot ${connection === "live" && data ? "green" : "amber"}`}
-              />
-              {connection === "live" && data
-                ? "Live workspace"
-                : "Reconnecting"}
-            </span>
+          <Button
+            variant="outline"
+            disabled={!data || busy}
+            onClick={() => act("pause", { paused: !data?.settings.paused })}
+          >
+            {data?.settings.paused ? <Play size={15} /> : <Pause size={15} />}{" "}
+            {data?.settings.paused ? "Resume team" : "Pause team"}
+          </Button>
+        </div>
+        {error && (
+          <div role="alert" className="alert error">
+            {error}
+          </div>
+        )}
+        {notice && (
+          <div
+            role={noticeError ? "alert" : "status"}
+            className={`alert ${noticeError ? "error" : "success"}`}
+          >
+            <span>{notice}</span>
             <button
-              className="refresh-button"
-              onClick={() => void load()}
-              title="Refresh workspace"
-              aria-label="Refresh workspace"
+              aria-label="Dismiss notification"
+              onClick={() => setNotice("")}
             >
-              <RefreshCw size={15} />
-              <span>Refresh</span>
+              <X size={15} />
             </button>
-            <button
-              className="mobile-search icon-link"
-              onClick={() => setPaletteOpen(true)}
-              aria-label="Search workspace"
-            >
-              <Search size={17} />
-            </button>
-            <Button asChild>
-              <Link href="/chat">
-                <Plus size={16} />
-                <span>New request</span>
-              </Link>
-            </Button>
           </div>
-        </header>
-        <main id="main-content">
-          <div className="page-title">
-            <div>
-              <h1>{page === "home" ? "Workspace" : title}</h1>
-              <p>
-                {
-                  (
-                    {
-                      home: "Requests, agents and Studio connections.",
-                      chat: "Plan changes with Lead and review the results.",
-                      team: "Configure agent models, tools and instructions.",
-                      tasks: "Inspect work, dependencies and failures.",
-                      games: "Manage local Roblox Studio targets.",
-                      reviews: "Approve tool calls and accept verified work.",
-                      logs: "Inspect worker events and API usage.",
-                      settings: "Connections, spending limits and appearance.",
-                      library:
-                        "Search official documentation and personal references.",
-                    } as Record<string, string>
-                  )[page]
-                }
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              disabled={!data || busy}
-              onClick={() => act("pause", { paused: !data?.settings.paused })}
-            >
-              {data?.settings.paused ? <Play size={15} /> : <Pause size={15} />}{" "}
-              {data?.settings.paused ? "Resume team" : "Pause team"}
-            </Button>
-          </div>
-          {error && (
-            <div role="alert" className="alert error">
-              {error}
-            </div>
-          )}
-          {notice && (
-            <div
-              role={noticeError ? "alert" : "status"}
-              className={`alert ${noticeError ? "error" : "success"}`}
-            >
-              <span>{notice}</span>
-              <button
-                aria-label="Dismiss notification"
-                onClick={() => setNotice("")}
-              >
-                <X size={15} />
-              </button>
-            </div>
-          )}
-          {!data && !error && (
-            <div className="empty">
-              <Loader2 className="spin" />
-              Connecting to your local worker…
-            </div>
-          )}
-          {data && page === "home" && (
-            <Overview
-              data={data}
-              busy={busy}
-              selectedGame={selectedGame}
-              send={send}
-            />
-          )}
-          {data && page === "chat" && (
-            <div className="chat-layout">
-              <section className="panel chat-panel">
-                <div className="panel-heading">
-                  <h3>
-                    <Avatar name="Lead" size="mini" /> Lead{" "}
-                    <span className="subtle">Task orchestrator</span>
-                  </h3>
-                  <Badge
-                    value={data.keyConfigured ? "ready" : "not configured"}
-                  />
-                </div>
-                <div className="messages">
-                  {data.chat.length ? (
-                    data.chat.map((m: any) => (
-                      <div className={`message ${m.role}`} key={m.id}>
-                        {m.role === "assistant" && (
-                          <Avatar name="Lead" size="mini" />
-                        )}
-                        <div>
-                          <small>
-                            {m.role === "user" ? "You" : "Lead"} ·{" "}
-                            {date(m.created)}
-                          </small>
-                          <div className="message-content">{m.content}</div>
-                        </div>
+        )}
+        {!data && !error && <Skeleton />}
+        {data && page === "home" && (
+          <Overview
+            data={data}
+            busy={busy}
+            selectedGame={selectedGame}
+            send={send}
+          />
+        )}
+        {data && page === "chat" && (
+          <div className="chat-layout">
+            <section className="panel chat-panel">
+              <div className="panel-heading">
+                <h3>
+                  <Avatar name="Lead" size="mini" /> Lead{" "}
+                  <span className="subtle">Task orchestrator</span>
+                </h3>
+                <Badge
+                  value={data.keyConfigured ? "ready" : "not configured"}
+                />
+              </div>
+              <div className="messages">
+                {data.chat.length ? (
+                  data.chat.map((m: any) => (
+                    <div className={`message ${m.role}`} key={m.id}>
+                      {m.role === "assistant" && (
+                        <Avatar name="Lead" size="mini" />
+                      )}
+                      <div>
+                        <small>
+                          {m.role === "user" ? "You" : "Lead"} ·{" "}
+                          {date(m.created)}
+                        </small>
+                        <div className="message-content">{m.content}</div>
                       </div>
-                    ))
-                  ) : (
-                    <Empty
-                      icon={<Sparkles />}
-                      title="No conversation yet"
-                      text="Select a target game and describe a change, including acceptance criteria."
-                    />
-                  )}
-                </div>
-                {composer}
-              </section>
-              <section className="panel chat-context">
-                <h3>How your team works</h3>
-                {[
-                  ["01", "Plan", "Lead turns your request into a task graph."],
-                  [
-                    "02",
-                    "Build",
-                    "Up to three specialists work independently.",
-                  ],
-                  ["03", "Verify", "Tester checks changes in Roblox Studio."],
-                  ["04", "Review", "You approve the finished work."],
-                ].map(([n, t, d]) => (
-                  <div className="workflow-step" key={n}>
-                    <b>{n}</b>
-                    <div>
-                      <strong>{t}</strong>
-                      <p>{d}</p>
                     </div>
+                  ))
+                ) : (
+                  <Empty
+                    icon={<Sparkles />}
+                    title="No conversation yet"
+                    text="Select a target game and describe a change, including acceptance criteria."
+                  />
+                )}
+              </div>
+              {composer}
+            </section>
+            <section className="panel chat-context">
+              <h3>How your team works</h3>
+              {[
+                ["01", "Plan", "Lead turns your request into a task graph."],
+                ["02", "Build", "Up to three specialists work independently."],
+                ["03", "Verify", "Tester checks changes in Roblox Studio."],
+                ["04", "Review", "You approve the finished work."],
+              ].map(([n, t, d]) => (
+                <div className="workflow-step" key={n}>
+                  <b>{n}</b>
+                  <div>
+                    <strong>{t}</strong>
+                    <p>{d}</p>
                   </div>
-                ))}
-                <div className="callout">
-                  <ShieldCheck size={19} />
-                  <p>
-                    Studio changes pause for your approval. Find the exact tool
-                    arguments in Reviews.
-                  </p>
                 </div>
-              </section>
+              ))}
+              <div className="callout">
+                <ShieldCheck size={19} />
+                <p>
+                  Studio changes pause for your approval. Find the exact tool
+                  arguments in Reviews.
+                </p>
+              </div>
+            </section>
+          </div>
+        )}
+        {data && page === "team" && (
+          <>
+            <div className="team-grid">
+              {data.agents.map((a: any) => (
+                <button
+                  key={a.name}
+                  className={`panel team-card ${selectedAgent === a.name ? "selected" : ""}`}
+                  onClick={() => setSelectedAgent(a.name)}
+                >
+                  <div className="team-head">
+                    <Avatar name={a.name} />
+                    <Badge
+                      value={
+                        !a.enabled
+                          ? "disabled"
+                          : running.some((t) => t.agent === a.name)
+                            ? "running"
+                            : "idle"
+                      }
+                    />
+                  </div>
+                  <h2>{a.name}</h2>
+                  <p>{roles[a.name as Role].title}</p>
+                  <small>{a.model}</small>
+                  <div className="team-metrics">
+                    <span>
+                      {
+                        tasks.filter(
+                          (t) => t.agent === a.name && t.status === "completed",
+                        ).length
+                      }{" "}
+                      tasks completed
+                    </span>
+                    <span>
+                      {
+                        data.memories.filter((m: any) => m.agent === a.name)
+                          .length
+                      }{" "}
+                      memories
+                    </span>
+                  </div>
+                </button>
+              ))}
             </div>
-          )}
-          {data && page === "team" && (
-            <>
-              <div className="team-grid">
-                {data.agents.map((a: any) => (
+            <AgentForm
+              key={selectedAgent}
+              agent={data.agents.find((a: any) => a.name === selectedAgent)}
+              busy={busy}
+              save={(b) => act("agents", b)}
+            />
+            <section className="panel spaced">
+              <h3>{selectedAgent}’s memory & history</h3>
+              {data.memories
+                .filter((m: any) => m.agent === selectedAgent)
+                .map((m: any) => (
+                  <pre key={m.id} className="memory">
+                    {m.content}
+                  </pre>
+                ))}
+              {!data.memories.some((m: any) => m.agent === selectedAgent) && (
+                <p className="muted-text">
+                  This agent has no saved memories yet.
+                </p>
+              )}
+            </section>
+          </>
+        )}
+        {data && page === "tasks" && (
+          <>
+            <section className="panel queue-summary">
+              <div>
+                <h3>Task progress</h3>
+                <p>
+                  {done.length} of {tasks.length} tasks completed ·{" "}
+                  {running.length} running · {approvals.length} waiting for
+                  approval
+                </p>
+              </div>
+              <progress
+                aria-label="Completed tasks"
+                max={Math.max(tasks.length, 1)}
+                value={done.length}
+              />
+            </section>
+            <div className="toolbar">
+              <div className="tabs">
+                {[
+                  "all",
+                  "queued",
+                  "running",
+                  "approval",
+                  "completed",
+                  "failed",
+                ].map((f) => (
                   <button
-                    key={a.name}
-                    className={`panel team-card ${selectedAgent === a.name ? "selected" : ""}`}
-                    onClick={() => setSelectedAgent(a.name)}
+                    className={filter === f ? "current" : ""}
+                    onClick={() => setFilter(f)}
+                    key={f}
                   >
-                    <div className="team-head">
-                      <Avatar name={a.name} />
-                      <Badge
-                        value={
-                          !a.enabled
-                            ? "disabled"
-                            : running.some((t) => t.agent === a.name)
-                              ? "running"
-                              : "idle"
-                        }
-                      />
-                    </div>
-                    <h2>{a.name}</h2>
-                    <p>{roles[a.name as Role].title}</p>
-                    <small>{a.model}</small>
-                    <div className="team-metrics">
-                      <span>
-                        {
-                          tasks.filter(
-                            (t) =>
-                              t.agent === a.name && t.status === "completed",
-                          ).length
-                        }{" "}
-                        tasks completed
-                      </span>
-                      <span>
-                        {
-                          data.memories.filter((m: any) => m.agent === a.name)
-                            .length
-                        }{" "}
-                        memories
-                      </span>
-                    </div>
+                    {f}
                   </button>
                 ))}
               </div>
-              <AgentForm
-                key={selectedAgent}
-                agent={data.agents.find((a: any) => a.name === selectedAgent)}
-                busy={busy}
-                save={(b) => act("agents", b)}
+              <input
+                aria-label="Search tasks"
+                placeholder="Search tasks…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
               />
-              <section className="panel spaced">
-                <h3>{selectedAgent}’s memory & history</h3>
-                {data.memories
-                  .filter((m: any) => m.agent === selectedAgent)
-                  .map((m: any) => (
-                    <pre key={m.id} className="memory">
-                      {m.content}
-                    </pre>
-                  ))}
-                {!data.memories.some((m: any) => m.agent === selectedAgent) && (
-                  <p className="muted-text">
-                    This agent has no saved memories yet.
-                  </p>
-                )}
-              </section>
-            </>
-          )}
-          {data && page === "tasks" && (
-            <>
-              <section className="panel queue-summary">
-                <div>
-                  <h3>Task progress</h3>
-                  <p>
-                    {done.length} of {tasks.length} tasks completed ·{" "}
-                    {running.length} running · {approvals.length} waiting for
-                    approval
-                  </p>
-                </div>
-                <progress
-                  aria-label="Completed tasks"
-                  max={Math.max(tasks.length, 1)}
-                  value={done.length}
-                />
-              </section>
-              <div className="toolbar">
-                <div className="tabs">
-                  {[
-                    "all",
-                    "queued",
-                    "running",
-                    "approval",
-                    "completed",
-                    "failed",
-                  ].map((f) => (
-                    <button
-                      className={filter === f ? "current" : ""}
-                      onClick={() => setFilter(f)}
-                      key={f}
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  aria-label="Search tasks"
-                  placeholder="Search tasks…"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-              </div>
-              <section className="panel task-list">
-                {tasks
-                  .filter(
-                    (t) =>
-                      (filter === "all" || t.status === filter) &&
-                      t.title.toLowerCase().includes(query.toLowerCase()),
-                  )
-                  .map((t) => (
-                    <details
-                      key={t.id}
-                      id={`task-${t.id}`}
-                      className="task-detail"
-                    >
-                      <summary>
-                        <TaskRow t={t} />
-                      </summary>
-                      <div className="task-body">
-                        <p>{t.instructions}</p>
-                        <small>
-                          Task {t.id} · Attempt {t.attempts} · {t.steps} model
-                          steps
-                        </small>
-                        <p>
-                          Depends on:{" "}
-                          {JSON.parse(t.deps)
-                            .map(
-                              (id: string) =>
-                                tasks.find((x) => x.id === id)?.title || id,
-                            )
-                            .join(", ") || "No dependencies"}
-                        </p>
-                        {t.error && <p className="failure">{t.error}</p>}
-                        {t.result && <pre>{t.result}</pre>}
-                        {["failed", "blocked"].includes(t.status) && (
-                          <Button
-                            size="sm"
-                            onClick={() => act("retry", { id: t.id })}
-                          >
-                            Retry task
-                          </Button>
-                        )}
-                      </div>
-                    </details>
-                  ))}
-                {!tasks.length && (
-                  <Empty
-                    icon={<GitBranch />}
-                    title="No tasks yet"
-                    text="Send your first request to Lead to create a real task graph."
-                  />
-                )}
-              </section>
-            </>
-          )}
-          {data && page === "games" && (
-            <div className="two-columns">
-              <section>
-                <div className="section-heading">
-                  <h2>Your games</h2>
-                  <Button
-                    variant="outline"
-                    disabled={busy}
-                    onClick={async () => {
-                      const r = await act("studios", {});
-                      if (r) setNotice(JSON.stringify(r.content, null, 2));
-                    }}
-                  >
-                    <Link2 size={15} /> Discover Studios
-                  </Button>
-                </div>
-                {data.games.map((g: any) => (
-                  <div className="panel game-card" key={g.id}>
-                    <div className="game-art">
-                      <Box size={44} />
-                      <span className="game-grid" />
-                    </div>
-                    <div>
-                      <h2>{g.name}</h2>
-                      <p>Studio instance: {g.studio_id}</p>
-                      <Badge
-                        value={g.id === selectedGame ? "selected" : "connected"}
-                      />
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => chooseGame(g.id)}
-                      >
-                        Use this game <ArrowRight size={14} />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                {!data.games.length && (
-                  <section className="panel">
-                    <Empty
-                      icon={<Gamepad2 />}
-                      title="No games registered"
-                      text="Connect the official Studio MCP server, discover an instance, and register it below."
-                    />
-                  </section>
-                )}
-              </section>
-              <form
-                className="panel form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const f = new FormData(e.currentTarget);
-                  void act("games", {
-                    name: f.get("name"),
-                    studioId: f.get("studioId"),
-                  });
-                }}
-              >
-                <h3>
-                  <Plus size={17} /> Add a game
-                </h3>
-                <label>
-                  Game name
-                  <input
-                    name="name"
-                    required
-                    placeholder="My Roblox experience"
-                  />
-                </label>
-                <label>
-                  Studio instance ID
-                  <input
-                    name="studioId"
-                    required
-                    placeholder="ID from Discover Studios"
-                  />
-                </label>
-                <p>
-                  Open the place in Roblox Studio, enable the official MCP
-                  server, and copy the instance ID returned by discovery.
-                </p>
-                <Button disabled={busy}>
-                  Add game <Plus size={14} />
-                </Button>
-              </form>
             </div>
-          )}
-          {data && page === "reviews" && (
-            <>
+            <section className="panel task-list">
+              {tasks
+                .filter(
+                  (t) =>
+                    (filter === "all" || t.status === filter) &&
+                    t.title.toLowerCase().includes(query.toLowerCase()),
+                )
+                .map((t) => (
+                  <details
+                    key={t.id}
+                    id={`task-${t.id}`}
+                    className="task-detail"
+                  >
+                    <summary>
+                      <TaskRow t={t} />
+                    </summary>
+                    <div className="task-body">
+                      <p>{t.instructions}</p>
+                      <small>
+                        Task {t.id} · Attempt {t.attempts} · {t.steps} model
+                        steps
+                      </small>
+                      <p>
+                        Depends on:{" "}
+                        {JSON.parse(t.deps)
+                          .map(
+                            (id: string) =>
+                              tasks.find((x) => x.id === id)?.title || id,
+                          )
+                          .join(", ") || "No dependencies"}
+                      </p>
+                      {t.error && <p className="failure">{t.error}</p>}
+                      {t.result && <pre>{t.result}</pre>}
+                      {["failed", "blocked"].includes(t.status) && (
+                        <Button
+                          size="sm"
+                          onClick={() => act("retry", { id: t.id })}
+                        >
+                          Retry task
+                        </Button>
+                      )}
+                    </div>
+                  </details>
+                ))}
+              {!tasks.length && (
+                <Empty
+                  icon={<GitBranch />}
+                  title="No tasks yet"
+                  text="Send your first request to Lead to create a real task graph."
+                />
+              )}
+            </section>
+          </>
+        )}
+        {data && page === "games" && (
+          <div className="two-columns">
+            <section>
               <div className="section-heading">
-                <h2>
-                  Studio approvals{" "}
-                  <span className="subtle">{approvals.length}</span>
-                </h2>
-                <span className="muted-text">
-                  Exact arguments, before anything changes.
-                </span>
+                <h2>Your games</h2>
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={async () => {
+                    const r = await act("studios", {});
+                    if (r) setNotice(JSON.stringify(r.content, null, 2));
+                  }}
+                >
+                  <Link2 size={15} /> Discover Studios
+                </Button>
               </div>
-              {approvals.map((a: any) => (
-                <section className="panel approval-card" key={a.id}>
-                  <div className="panel-heading">
-                    <h3>
-                      <ShieldCheck size={18} />
-                      {a.tool}
-                    </h3>
-                    <Badge value="approval" />
+              {data.games.map((g: any) => (
+                <div className="panel game-card" key={g.id}>
+                  <div className="game-art">
+                    <Box size={44} />
+                    <span className="game-grid" />
                   </div>
-                  <p>{tasks.find((t) => t.id === a.task_id)?.title}</p>
-                  <pre>{JSON.stringify(JSON.parse(a.args), null, 2)}</pre>
-                  <div className="actions">
+                  <div>
+                    <h2>{g.name}</h2>
+                    <p>Studio instance: {g.studio_id}</p>
+                    <Badge
+                      value={g.id === selectedGame ? "selected" : "connected"}
+                    />
                     <Button
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() =>
-                        act("approve", { id: a.id, approved: false })
-                      }
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => chooseGame(g.id)}
                     >
-                      <X size={15} /> Reject change
-                    </Button>
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        act("approve", { id: a.id, approved: true })
-                      }
-                    >
-                      <Check size={15} /> Approve change
+                      Use this game <ArrowRight size={14} />
                     </Button>
                   </div>
-                </section>
+                </div>
               ))}
-              {!approvals.length && (
+              {!data.games.length && (
                 <section className="panel">
                   <Empty
-                    icon={<ShieldCheck />}
-                    title="No changes waiting on you"
-                    text="When an agent proposes a Studio modification, review and approve it here."
+                    icon={<Gamepad2 />}
+                    title="No games registered"
+                    text="Connect the official Studio MCP server, discover an instance, and register it below."
                   />
                 </section>
               )}
-              {data.uncertain?.map((c: any) => (
-                <section className="panel approval-card" key={c.id}>
-                  <h3>Inspect uncertain operation: {c.tool}</h3>
-                  <pre>{c.args}</pre>
-                  <form
-                    className="form"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const f = new FormData(e.currentTarget);
-                      void act("resolve", {
-                        id: c.id,
-                        executed: f.get("executed") === "yes",
-                        evidence: f.get("evidence"),
-                      });
-                    }}
-                  >
-                    <label>
-                      Outcome after inspecting Studio
-                      <select name="executed">
-                        <option value="yes">
-                          Change already applied — preserve it
-                        </option>
-                        <option value="no">
-                          Change did not apply — allow retry
-                        </option>
-                      </select>
-                    </label>
-                    <label>
-                      Inspection evidence
-                      <textarea required minLength={10} name="evidence" />
-                    </label>
-                    <Button disabled={busy}>Record outcome</Button>
-                  </form>
-                </section>
-              ))}
-              <div className="section-heading">
-                <h2>Completed work</h2>
-              </div>
-              {data.runs
-                .filter((r: any) => ["review", "accepted"].includes(r.status))
-                .map((r: any) => (
-                  <section className="panel approval-card" key={r.id}>
-                    <div className="panel-heading">
-                      <h3>{r.request}</h3>
-                      <Badge value={r.status} />
-                    </div>
-                    {tasks
-                      .filter((t) => t.run_id === r.id && t.agent === "Tester")
-                      .map((t) => (
-                        <pre key={t.id}>{t.result}</pre>
+            </section>
+            <form
+              className="panel form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const f = new FormData(e.currentTarget);
+                void act("games", {
+                  name: f.get("name"),
+                  studioId: f.get("studioId"),
+                });
+              }}
+            >
+              <h3>
+                <Plus size={17} /> Add a game
+              </h3>
+              <label>
+                Game name
+                <input
+                  name="name"
+                  required
+                  placeholder="My Roblox experience"
+                />
+              </label>
+              <label>
+                Studio instance ID
+                <input
+                  name="studioId"
+                  required
+                  placeholder="ID from Discover Studios"
+                />
+              </label>
+              <p>
+                Open the place in Roblox Studio, enable the official MCP server,
+                and copy the instance ID returned by discovery.
+              </p>
+              <Button disabled={busy}>
+                Add game <Plus size={14} />
+              </Button>
+            </form>
+          </div>
+        )}
+        {data && page === "reviews" && (
+          <Reviews data={data} busy={busy} act={act} />
+        )}
+        {data && page === "logs" && (
+          <>
+            <div className="toolbar">
+              <h2>Live activity stream</h2>
+              <span className="live">
+                <span className="dot green" />
+                {connection}
+              </span>
+            </div>
+            <section className="panel">
+              <Events events={data.events} />
+            </section>
+            <section className="panel spaced">
+              <h3>API usage ledger</h3>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      {[
+                        "Time",
+                        "Agent",
+                        "Model",
+                        "Input",
+                        "Output",
+                        "Cost",
+                        "Status",
+                      ].map((x) => (
+                        <th key={x}>{x}</th>
                       ))}
-                    {r.status === "review" && (
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          const f = new FormData(e.currentTarget);
-                          void act("review", {
-                            id: r.id,
-                            accepted: false,
-                            feedback: f.get("feedback"),
-                          });
-                        }}
-                      >
-                        <label>
-                          Request revisions
-                          <textarea
-                            name="feedback"
-                            required
-                            minLength={5}
-                            placeholder="What should the team change?"
-                          />
-                        </label>
-                        <div className="actions">
-                          <Button variant="outline" disabled={busy}>
-                            Request changes
-                          </Button>
-                          <Button
-                            type="button"
-                            disabled={busy}
-                            onClick={() =>
-                              act("review", { id: r.id, accepted: true })
-                            }
-                          >
-                            <CheckCheck size={15} /> Accept work
-                          </Button>
-                        </div>
-                      </form>
-                    )}
-                  </section>
-                ))}
-            </>
-          )}
-          {data && page === "logs" && (
-            <>
-              <div className="toolbar">
-                <h2>Live activity stream</h2>
-                <span className="live">
-                  <span className="dot green" />
-                  {connection}
-                </span>
-              </div>
-              <section className="panel">
-                <Events events={data.events} />
-              </section>
-              <section className="panel spaced">
-                <h3>API usage ledger</h3>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        {[
-                          "Time",
-                          "Agent",
-                          "Model",
-                          "Input",
-                          "Output",
-                          "Cost",
-                          "Status",
-                        ].map((x) => (
-                          <th key={x}>{x}</th>
-                        ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.usage.map((u: any) => (
+                      <tr key={u.id}>
+                        <td>{date(u.created)}</td>
+                        <td>{u.agent}</td>
+                        <td>{u.model}</td>
+                        <td>{u.input_tokens || "—"}</td>
+                        <td>{u.output_tokens || "—"}</td>
+                        <td>
+                          {money(u.cost)}
+                          {u.reserved > 0 && (
+                            <small> + {money(u.reserved)} reserved</small>
+                          )}
+                        </td>
+                        <td>
+                          <Badge value={u.status} />
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {data.usage.map((u: any) => (
-                        <tr key={u.id}>
-                          <td>{date(u.created)}</td>
-                          <td>{u.agent}</td>
-                          <td>{u.model}</td>
-                          <td>{u.input_tokens || "—"}</td>
-                          <td>{u.output_tokens || "—"}</td>
-                          <td>
-                            {money(u.cost)}
-                            {u.reserved > 0 && (
-                              <small> + {money(u.reserved)} reserved</small>
-                            )}
-                          </td>
-                          <td>
-                            <Badge value={u.status} />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </>
-          )}
-          {page === "library" && <Library />}
-          {data && page === "settings" && (
-            <>
-              <Appearance
-                preferences={preferences}
-                update={updatePreferences}
-                data={data}
-              />
-              <SettingsForm data={data} busy={busy} act={act} />
-            </>
-          )}
-          <footer className="footer">
-            <span>
-              <Terminal size={12} /> forge / {page}
-              <span className="footer-separator">|</span>
-              <span
-                className={`dot ${connection === "live" ? "green" : "amber"}`}
-              />
-              {connection === "live" ? "live events" : "polling"}
-            </span>
-            <button onClick={() => setShortcutsOpen(true)}>
-              Ctrl+K launcher <span className="footer-separator">|</span> ?
-              shortcuts
-            </button>
-            <span>
-              {data
-                ? `${running.length}/3 workers · $${data.spend.cost.toFixed(4)} used`
-                : "Worker unavailable"}
-            </span>
-          </footer>
-        </main>
-      </div>
-    </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </>
+        )}
+        {page === "library" && <Library />}
+        {data && page === "settings" && (
+          <>
+            <Appearance
+              preferences={preferences}
+              update={updatePreferences}
+              data={data}
+            />
+            <SettingsForm data={data} busy={busy} act={act} />
+          </>
+        )}
+        <footer className="footer">
+          <span>
+            <ShieldCheck size={12} /> Local workspace{" "}
+            <span className="footer-separator">·</span> Your keys stay on your
+            device
+          </span>
+          <button onClick={() => setShortcutsOpen(true)}>
+            <Keyboard size={12} /> Keyboard shortcuts
+          </button>
+        </footer>
+      </main>
+    </WorkspaceShell>
   );
 }
 function Empty({

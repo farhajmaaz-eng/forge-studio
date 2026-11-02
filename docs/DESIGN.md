@@ -1,43 +1,34 @@
-# Forge desktop workspace
+# Forge Studio design
 
-## Direction
+Forge is a compact workspace for Roblox development, based on `design-reference.png` and the requirements in `ROBLOX_STUDIO_UI_REDESIGN.md`. The interface uses a near-black canvas, a 232px navigation sidebar, a persistent 76px project toolbar, restrained purple selection, green approval controls, and a pink-to-orange primary action. Locally bundled Geist provides the interface typography; monospace is reserved for code and exact tool arguments.
 
-Forge is an operator’s workspace for Roblox development. The visual reference is a configured Linux desktop: Hyprland’s tiled work areas and numbered workspaces, Waybar’s compact status modules, and KDE’s application conventions. It is still a web application; no decorative close, minimize, CPU, RAM or network meters pretend to control or measure the host desktop.
+Shared tokens in `src/app/globals.css` define surfaces, text, borders, status colors, spacing, and radii. Graphite and Evergreen retain their persisted preference keys and adjust the accent within the same visual system. The default palette retains the `nord` preference key for compatibility with saved settings. Comfortable density and focus mode continue to work.
 
-The default is Nord: blue-gray surfaces, cyan selection, muted green success, amber attention and red failures. Graphite and Evergreen offer the same hierarchy with different palettes. Appearance and density are local browser preferences, independent of API credentials and runtime settings.
+`WorkspaceShell` owns shared navigation and toolbar presentation. Navigation counts, agent tiles, active agents, projects, connection status, and spending all come from the existing snapshot. The budget card displays actual workspace API spending and reservations; it does not imply a subscription or a per-project media budget. Unsupported reference features such as Pitches, Market, Pro, and app updates are omitted.
 
-## Research and interpretation
+The sidebar scrolls independently when its contents exceed the available height. Tablet widths use an icon rail, and phones use a native modal navigation drawer with keyboard dismissal and focus management. The main canvas scrolls beneath the persistent toolbar. Each of the nine existing views retains its own purpose and controls.
 
-- [KDE: Layout and navigation](https://develop.kde.org/hig/layout_and_nav/) describes logical grouping, consistent spacing and layouts that adapt when windows are narrow. Forge uses a small spacing scale, contextual toolbars, a global navigation pane and secondary runtime panes that stack on narrow screens. This is inspiration, not a claim of native KDE compliance.
-- [KDE: Communicating status changes](https://develop.kde.org/hig/status_changes/) calls for sparing color, actionable errors and avoiding unnecessary notifications. Forge keeps neutral surfaces, labels every state, distinguishes failed actions from successful saves, and exposes connection setup and failed tasks directly.
-- [KDE: Text and labels](https://develop.kde.org/hig/text_and_labels/) informed the plain control labels and concise copy.
-- [Waybar configuration](https://github.com/Alexays/Waybar/wiki/Configuration) provides a reference for compact workspace and status modules. Forge’s numbered links navigate actual pages. The clock is the browser’s local time; worker status comes from the worker heartbeat.
-- [Joshua Snoddy: Why AI-generated websites look the same](https://www.joshuasnoddy.com/blog/why-ai-websites-look-the-same/) identifies repeated purple gradients, glass panels, interchangeable component layouts and generic icon use as a recognizable pattern. These are design opinions, not a scientific classifier or proof of authorship. The useful response here is specific product decisions rather than chasing a detector score.
+## Reviews
 
-## Changes from the previous UI
+Pending tool approvals are grouped by game, agent, and change category. Code changes display their actual arguments; explicit image deliverables display media previews. Two-card media groups and compact four-card asset groups follow the reference's visual grammar. No example art or production data is seeded to fill the gallery.
 
-- Replaced promotional headings and taglines with page names and operational descriptions.
-- Replaced the homepage’s ornamental cards with a request editor, a real task queue, review/recovery links, agent states, registered places and a connection summary.
-- Replaced library cards with a document index, preserving search, bookmarks and source attribution.
-- Removed gradient primary buttons, glass effects, glowing avatars, arbitrary pill styling and oversized empty-state illustrations. Color now mostly communicates selection, authority or state.
-- Added named surface, border, text and state tokens. Themes use the same component rules; the stylesheet does not stack another theme’s overrides on top of the old design.
-- Added a bundled monospace font for IDs, timestamps, states and status modules. Ordinary reading text remains proportional.
-- Retained reduced-motion support, keyboard focus outlines, control labels, non-color state labels and mobile layouts. Added a skip-to-content link.
+The detail drawer exposes task context, ownership, attempt count, timestamps, complete arguments or results, and links to tasks and available images. Existing run acceptance, revision feedback, and uncertain-operation reconciliation remain available. Approved runs remain visible in review history.
 
-## Useful controls
+Individual and batch approval actions use the existing endpoints. Batch decisions are sequential because the backend accepts one approval per request. On failure, processing stops, already recorded decisions remain recorded, the error is surfaced, and the remaining items stay reviewable. Rejections require a confirmation dialog; canceling it sends no mutation. Worker-side validation remains authoritative if an item changes during review.
 
-- **Ctrl/Cmd+K:** search pages, agents and tasks. Task results open the matching task inspector.
-- **Alt+1…9:** switch pages in sidebar order.
-- **Alt+F:** toggle focus mode, hiding navigation.
-- **?:** show keyboard shortcuts.
-- **Escape:** dismiss the current native dialog.
+The current backend has no independent media catalog, review comment thread, or asset version model. Previews recognize explicit structured image URLs, MCP image content, and Markdown images in existing deliverables. Missing media falls back to text or a clearly labeled unavailable preview rather than invented artwork.
 
-Navigation and focus shortcuts are disabled while editing text or while a dialog is open. These shortcuts are available through visible controls as well; some browser or desktop environments may reserve a shortcut first.
+## Preserved controls
 
-Settings → Workspace appearance controls the color scheme, density and focus preference. The top bar’s palette button cycles color schemes. Density adjusts row and pane spacing without changing the underlying task data.
+- Ctrl/Cmd+K opens page, agent, and task search.
+- Alt+1…9 preserves the established workspace order: Home, Lead, Team, Tasks, Games, Review, Library, Activity, Settings.
+- Alt+F toggles focus mode; `?` opens keyboard shortcuts.
+- Escape closes native dialogs, restoring keyboard focus.
+- Settings retains model configuration, Studio connection, spending limits, approval policy, density, and themes.
+- Diagnostics exports remain local and exclude credentials, prompts, messages, and tool arguments.
 
-Download diagnostics produces a local JSON file with connection flags, model names, task counts and budget totals. It deliberately selects those fields; it does not export the full snapshot, API keys, prompts, messages, game names, reference text or tool arguments. Nothing is uploaded.
+Snapshots, WebSocket updates, polling, orchestration, persistence, task dependencies, retries, and backend APIs retain their existing contracts. UI tests use an isolated worker data directory or browser-intercepted fixtures; populated review fixtures never enter the production database.
 
-## Live update payloads
+## Verification
 
-Dashboard snapshots now omit the complete provider pricing catalog and agent conversation transcripts. Those remain persisted and available to the worker; the UI uses task metadata, results, model names and usage totals. This avoids transferring and parsing unused catalog and conversation text on every live refresh. The regression test verifies that dashboard payloads omit these fields while worker storage retains them.
+Run `npm run build`, `npm run typecheck`, and `npm test`. With the local web app and worker running, `scripts/ui-smoke.mjs`, `scripts/desktop-smoke.mjs`, and `scripts/library-smoke.mjs` check existing routes and workflows. `scripts/redesign-smoke.mjs` adds populated media reviews, partial batch failures, confirmation cancellation, individual decisions, revision feedback, run acceptance, uncertain-operation recovery, mobile navigation, and responsive widths from 320px to 1540px. It captures review screenshots under `artifacts/`; those populated screenshots use browser-only fixtures.
