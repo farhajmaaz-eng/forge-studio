@@ -36,10 +36,12 @@ async function proxy(
         signal: AbortSignal.timeout(130000),
       },
     );
-    return new NextResponse(await r.text(), {
+    return new NextResponse(await r.arrayBuffer(), {
       status: r.status,
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": r.headers.get("Content-Type") || "application/json",
+        "Content-Disposition": r.headers.get("Content-Disposition") || "inline",
+        "X-Content-Type-Options": "nosniff",
         "Cache-Control": "no-store",
       },
     });

@@ -1,4 +1,5 @@
 import { db, get, set, reserve, event } from "./store";
+import { readCompletionStream } from "./stream";
 export async function refreshModels() {
   const r = await fetch("https://openrouter.ai/api/v1/models", {
     signal: AbortSignal.timeout(20000),
@@ -20,6 +21,7 @@ export async function completion(
   t: any,
   messages: any[],
   tools: any[],
+  onText?: (text: string) => void,
 ) {
   if (!process.env.OPENROUTER_API_KEY)
     throw new Error(
@@ -53,7 +55,7 @@ export async function completion(
         tools: tools.length ? tools : undefined,
         temperature: agent.temperature,
         max_tokens: agent.max_tokens,
-        usage: { include: true },
+        stream: true,
       }),
       signal: AbortSignal.timeout(180000),
     });
@@ -70,9 +72,25 @@ export async function completion(
     else db.prepare("UPDATE usage SET status='uncertain' WHERE id=?").run(id);
     throw new Error(`OpenRouter ${response.status}: ${text.slice(0, 600)}`);
   }
-  const body = await response.json();
+  let body: any;
+  try {
+    body = response.headers.get("content-type")?.includes("text/event-stream")
+      ? await readCompletionStream(response, onText)
+      : await response.json();
+  } catch (error) {
+    db.prepare("UPDATE usage SET status='uncertain' WHERE id=?").run(id);
+    throw error;
+  }
   const u = body.usage;
-  if (!u || !body.choices?.[0]?.message) {
+  if (
+    !u ||
+    !body.choices?.[0]?.message ||
+    !Number.isFinite(u.prompt_tokens) ||
+    u.prompt_tokens < 0 ||
+    !Number.isFinite(u.completion_tokens) ||
+    u.completion_tokens < 0 ||
+    (u.cost != null && (!Number.isFinite(u.cost) || u.cost < 0))
+  ) {
     db.prepare("UPDATE usage SET status='uncertain' WHERE id=?").run(id);
     throw new Error(
       "Incomplete provider response; budget reservation retained.",

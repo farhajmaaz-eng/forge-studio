@@ -157,6 +157,10 @@ try {
   await studio
     .getByRole("button", { name: "Approve all 3", exact: true })
     .click();
+  await page
+    .getByRole("dialog", { name: "Approve 3 changes?" })
+    .getByRole("button", { name: "Approve changes", exact: true })
+    .click();
   await expect(page.locator(".alert.error")).toContainText(
     "Approval is no longer pending",
   );
@@ -215,7 +219,7 @@ try {
     .getByRole("button", { name: "Approve change", exact: true })
     .click();
   await expect(drawer).toHaveCount(0);
-  expect(decisions.at(-1)).toEqual({ id: "asset-1", approved: true });
+  expect(decisions.at(-1)).toMatchObject({ id: "asset-1", approved: true });
   console.log(
     "PASS asset preview, task context, exact arguments, Escape and individual approval",
   );

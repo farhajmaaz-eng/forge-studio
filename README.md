@@ -41,7 +41,7 @@ Suggested first request: “Add a server-side checkpoint system to my obby. Pres
 
 ## Runtime architecture
 
-- **Next.js** serves nine responsive dashboard pages and a same-origin API proxy. All privileged operations go through the local worker. No browser-bundled API keys.
+- **Next.js** serves eleven responsive dashboard pages and a same-origin API proxy. All privileged operations go through the local worker. No browser-bundled API keys.
 - **Worker** (`worker/index.ts`) binds to `127.0.0.1:4318`. Authenticated HTTP uses a random 0600 local token, and WebSocket broadcasts only refresh notifications. The UI fetches protected snapshots through Next. HTTP polling is the fallback. `WORKER_PORT` is configurable; restart both processes when changing it.
 - **Seven independent agents** each have isolated prompts, persistent memory, conversation/tool context, role-based tools, task histories and execution cycles. Lead delegates; Architect designs; Builder codes Luau; Frame builds UI; Scenic builds worlds; Balance tunes economies; Tester checks behavior. Every model turn is a genuine separate OpenRouter request; there is no production simulator or seeded activity.
 - **LangGraph** runs reason/tool phases with persistent SQLite checkpoints per task thread. Task messages and tool outcomes are separately persisted to support partial tool batches and restart recovery. The SQLite dependency scheduler runs at most three workers concurrently and one task per agent. Dependencies, retries with backoff, handoffs, blocked-task recovery, step limits and user review are durable.
@@ -107,3 +107,13 @@ Forge uses a near-black canvas, a persistent project toolbar, and a compact side
 **Alt+1…9** switches pages, **Alt+F** toggles navigation, **Ctrl/Cmd+K** opens the launcher, and **?** shows shortcuts. Workspace shortcuts do not run while editing text. Launcher task results open the matching task inspector. Failed and blocked tasks also appear in the workspace recovery pane.
 
 Use **Download diagnostics** in the sidebar or Settings to save connection status, model configuration flags, task counts and spending totals for troubleshooting. The export excludes credentials, prompts and messages. See [docs/DESIGN.md](docs/DESIGN.md) for the design system, review behavior, and verification details.
+
+## V2 features
+
+The existing Forge design is retained. New workspaces add project-scoped streamed Lead responses, explicit execution-plan approval, agent work panels and follow-ups, structured tasks with priority/dependencies, safe pause/cancel controls, tracked human questions, persistent review notes/history, and reusable assets/systems. See [the feature audit and integration guide](docs/FEATURE_AUDIT_V2.md).
+
+Games includes lifecycle metadata and LiveOps views. Market and LiveOps accept validated JSON exports with a source URL, ISO 8601 observation time, and quality (`exported`, `sampled`, or `estimated`). Their Import dialogs document the JSON format. No live telemetry or market feed is connected by default. Pitches retain versions and market evidence; an accepted pitch can become a planning project and an approval-gated Lead task.
+
+Library defaults to the existing References section, with Assets and Systems tabs alongside it. Local media uploads are limited to 2 MB and validated against their declared type. Larger media can be referenced by URL. Script/module content is stored as text; importing or approving an artifact never executes, installs, uploads, or publishes it. Task and run stops take effect at execution boundaries; an already-sent Studio operation may finish.
+
+Quick verification is `npm test` plus `npm run build`. For browser integration, start the worker and web app with the same explicitly isolated `/tmp/forge-v2-*` `FORGE_DATA_DIR`, then run `FORGE_DATA_DIR=/tmp/forge-v2-check node scripts/features-v2-smoke.mjs`. It tests the changed workflows and focused mobile layouts. Add `--full` for the longer all-route, three-width matrix. The script refuses a production data directory. All captured V2 examples use that isolated database.

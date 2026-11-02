@@ -16,7 +16,6 @@ export default function CommandPalette({
   const [query, setQuery] = useState("");
   useEffect(() => {
     dialog.current?.showModal();
-    return () => dialog.current?.close();
   }, []);
   const routes = [
     ["Home", "/"],
@@ -28,6 +27,8 @@ export default function CommandPalette({
     ["Reviews", "/reviews"],
     ["Activity logs", "/logs"],
     ["Settings", "/settings"],
+    ["Pitches", "/pitches"],
+    ["Market", "/market"],
   ];
   const results = [
     ...routes.map(([label, href]) => ({

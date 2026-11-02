@@ -18,22 +18,32 @@ import {
 import { Button } from "./ui/button";
 import { Avatar } from "./agent-avatar";
 import { roles } from "@/lib/roles";
+import HumanAttention from "./human-attention";
+import type { Act } from "./feature-ui";
 export default function Overview({
   data,
   busy,
   selectedGame,
   send,
+  act,
 }: {
   data: any;
   busy: boolean;
   selectedGame: string;
   send: (e: FormEvent<HTMLFormElement>) => Promise<boolean>;
+  act: Act;
 }) {
   const [prompt, setPrompt] = useState("");
   const tasks: any[] = data.tasks;
   const running = tasks.filter((t) => t.status === "running");
   const queued = tasks.filter((t) => t.status === "queued");
-  const failed = tasks.filter((t) => ["failed", "blocked"].includes(t.status));
+  const failed = tasks.filter(
+    (t) =>
+      ["failed", "blocked"].includes(t.status) &&
+      !(data.attention || []).some(
+        (q: any) => q.status === "pending" && q.task_id === t.id,
+      ),
+  );
   const pending = data.approvals.filter((a: any) => a.status === "pending");
   const reviews = data.runs.filter((r: any) => r.status === "review");
   const done = tasks.filter((t) => t.status === "completed");
@@ -165,6 +175,7 @@ export default function Overview({
               ))}
             </div>
           </section>
+          <HumanAttention data={data} act={act} busy={busy} />
           {!ready && (
             <section className="panel setup-panel">
               <div className="window-heading">
@@ -403,7 +414,12 @@ export default function Overview({
                 return (
                   <Link href="/games" className="world-progress" key={g.id}>
                     <strong>{g.name}</strong>
-                    <small>Studio {g.studio_id}</small>
+                    <small>
+                      {g.stage || "prototype"} ·{" "}
+                      {g.studio_id
+                        ? `Studio ${g.studio_id}`
+                        : "Planning project"}
+                    </small>
                     <progress
                       aria-label={`${g.name} task completion`}
                       max={gameTasks.length || 1}

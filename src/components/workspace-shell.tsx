@@ -10,6 +10,8 @@ import {
   Flame,
   Gamepad2,
   Gauge,
+  Lightbulb,
+  Compass,
   Home,
   Images,
   Keyboard,
@@ -39,6 +41,8 @@ export const navigation = [
   ["library", "Library", BookOpen],
   ["logs", "Activity", Activity],
   ["settings", "Settings", Settings],
+  ["pitches", "Pitches", Lightbulb],
+  ["market", "Market", Compass],
 ] as const;
 
 export function UsagePanel({
@@ -106,6 +110,7 @@ type Props = {
   openSearch: () => void;
   openShortcuts: () => void;
   selectAgent: (name: string) => void;
+  newTask: () => void;
 };
 
 export default function WorkspaceShell(props: Props) {
@@ -132,10 +137,31 @@ export default function WorkspaceShell(props: Props) {
   const reviews =
     (data?.approvals || []).filter((a: any) => a.status === "pending").length +
     (data?.runs || []).filter((r: any) => r.status === "review").length +
-    (data?.uncertain || []).length;
+    (data?.uncertain || []).length +
+    (data?.assetReviews || 0);
+  const questions = (data?.attention || []).filter(
+    (q: any) => q.status === "pending",
+  ).length;
+  const plans = (data?.runs || []).filter(
+    (r: any) =>
+      r.plan_status === "pending" &&
+      r.status === "active" &&
+      (data?.tasks || []).some(
+        (t: any) =>
+          t.run_id === r.id && t.agent === "Lead" && t.status === "completed",
+      ),
+  ).length;
   const attention =
+    questions +
+    plans +
     reviews +
-    tasks.filter((t) => ["failed", "blocked"].includes(t.status)).length;
+    tasks.filter(
+      (t) =>
+        ["failed", "blocked"].includes(t.status) &&
+        !(data?.attention || []).some(
+          (q: any) => q.status === "pending" && q.task_id === t.id,
+        ),
+    ).length;
   const game = data?.games.find((g: any) => g.id === selectedGame);
   const title = navigation.find((n) => n[0] === page)?.[1] || "Home";
   const agents = data?.agents || [];
@@ -146,6 +172,9 @@ export default function WorkspaceShell(props: Props) {
       ["running", "queued", "approval"].includes(t.status),
     ).length,
     reviews,
+    pitches: (data?.pitches || []).filter(
+      (p: any) => p.status === "draft" || p.status === "revision_requested",
+    ).length,
   };
   useEffect(() => {
     mobileNav.current?.close();
@@ -214,7 +243,7 @@ export default function WorkspaceShell(props: Props) {
       </nav>
       <span className="nav-label">Studio</span>
       <nav aria-label="Studio navigation">
-        {["games", "library", "logs"].map(navItem)}
+        {["games", "pitches", "market", "library", "logs"].map(navItem)}
       </nav>
       <section className="sidebar-team" aria-label="Agent team">
         <span className="nav-label">
@@ -356,7 +385,15 @@ export default function WorkspaceShell(props: Props) {
             </div>
             {attention > 0 && (
               <Link
-                href={reviews ? "/reviews" : "/tasks"}
+                href={
+                  questions
+                    ? "/"
+                    : plans
+                      ? "/chat"
+                      : reviews
+                        ? "/reviews"
+                        : "/tasks"
+                }
                 className="attention-chip"
               >
                 <span>{attention}</span> need your attention
@@ -410,11 +447,9 @@ export default function WorkspaceShell(props: Props) {
             >
               <Search size={16} />
             </button>
-            <Button asChild>
-              <Link href="/chat" aria-label="New task">
-                <Plus size={16} />
-                <span>New task</span>
-              </Link>
+            <Button onClick={props.newTask} aria-label="New task">
+              <Plus size={16} />
+              <span>New task</span>
             </Button>
           </div>
         </header>

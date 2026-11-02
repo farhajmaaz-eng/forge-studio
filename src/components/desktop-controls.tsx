@@ -92,7 +92,6 @@ export function Shortcuts({ close }: { close: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     ref.current?.showModal();
-    return () => ref.current?.close();
   }, []);
   return (
     <dialog

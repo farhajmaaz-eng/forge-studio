@@ -4,6 +4,7 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID, randomBytes } from "node:crypto";
 import { roles } from "../src/lib/roles";
+import { migrateFeatures } from "./migrations";
 export const dataDir = resolve(process.env.FORGE_DATA_DIR || ".data");
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 const secretPath = resolve(dataDir, "worker.secret");
@@ -31,6 +32,7 @@ CREATE TABLE IF NOT EXISTS tool_calls (id TEXT PRIMARY KEY,task_id TEXT,tool TEX
 CREATE TABLE IF NOT EXISTS usage (id TEXT PRIMARY KEY,task_id TEXT,agent TEXT,model TEXT,input_tokens INTEGER,output_tokens INTEGER,cost REAL,reserved REAL DEFAULT 0,status TEXT,created TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS locks (name TEXT PRIMARY KEY,owner TEXT NOT NULL);
 `);
+migrateFeatures(db);
 const defaults: Record<string, unknown> = {
   cap: 9,
   paused: false,
@@ -128,7 +130,7 @@ export function snapshot() {
     agents: db.prepare("SELECT * FROM agents").all(),
     tasks: db
       .prepare(
-        "SELECT id,run_id,agent,title,instructions,status,deps,result,attempts,steps,next_at,error,created,updated FROM tasks ORDER BY created DESC",
+        "SELECT id,run_id,agent,title,instructions,status,deps,result,attempts,steps,next_at,error,created,updated,priority,acceptance,parent_task_id,stop_requested,requester FROM tasks ORDER BY created DESC",
       )
       .all(),
     runs: db.prepare("SELECT * FROM runs ORDER BY created DESC").all(),
@@ -140,6 +142,27 @@ export function snapshot() {
       .all(),
     usage: db
       .prepare("SELECT * FROM usage ORDER BY created DESC LIMIT 300")
+      .all(),
+    attention: db
+      .prepare("SELECT * FROM attention_requests ORDER BY rowid DESC LIMIT 200")
+      .all(),
+    assetReviews: (
+      db
+        .prepare("SELECT COUNT(*) AS count FROM assets WHERE status='pending'")
+        .get() as any
+    ).count,
+    pitches: db
+      .prepare(
+        "SELECT id,title,hook,game_id,status,version FROM pitches ORDER BY updated DESC",
+      )
+      .all(),
+    reviewEvents: db
+      .prepare("SELECT * FROM review_events ORDER BY rowid DESC LIMIT 100")
+      .all(),
+    agentUpdates: db
+      .prepare(
+        "SELECT * FROM agent_messages WHERE rowid IN (SELECT MAX(rowid) FROM agent_messages GROUP BY task_id) ORDER BY rowid DESC LIMIT 50",
+      )
       .all(),
     memories: db
       .prepare("SELECT * FROM memories ORDER BY created DESC LIMIT 100")

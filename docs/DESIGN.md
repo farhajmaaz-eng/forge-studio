@@ -16,7 +16,7 @@ The detail drawer exposes task context, ownership, attempt count, timestamps, co
 
 Individual and batch approval actions use the existing endpoints. Batch decisions are sequential because the backend accepts one approval per request. On failure, processing stops, already recorded decisions remain recorded, the error is surfaced, and the remaining items stay reviewable. Rejections require a confirmation dialog; canceling it sends no mutation. Worker-side validation remains authoritative if an item changes during review.
 
-The current backend has no independent media catalog, review comment thread, or asset version model. Previews recognize explicit structured image URLs, MCP image content, and Markdown images in existing deliverables. Missing media falls back to text or a clearly labeled unavailable preview rather than invented artwork.
+V2 extends the existing design with a local asset/system catalog, immutable pitch versions, persistent verdict notes/history, and linked artifact revisions. Previews support explicit image and video deliverables; missing media falls back to inspectable output. Market and LiveOps use source-attributed imports until an external data adapter is configured. See [the V2 audit](FEATURE_AUDIT_V2.md) for implementation and verification details.
 
 ## Preserved controls
 

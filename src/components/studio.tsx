@@ -30,7 +30,13 @@ import { Button } from "@/components/ui/button";
 import { roles, type Role } from "@/lib/roles";
 import { Avatar } from "./agent-avatar";
 import Overview from "./overview";
-import Library from "./library";
+import LibraryHub from "./library-hub";
+import TaskWorkspace, { NewTaskDialog } from "./task-workspace";
+import AgentWorkspace, { LeadWorkspace } from "./agent-workspace";
+import GameOps from "./game-ops";
+import Market from "./market";
+import Pitches from "./pitches";
+import { ConfirmDialog } from "./ui/workspace-primitives";
 import CommandPalette from "./command-palette";
 import WorkspaceShell, { navigation as nav } from "./workspace-shell";
 import Reviews from "./reviews";
@@ -48,11 +54,26 @@ function Badge({ value }: { value: string }) {
     </span>
   );
 }
-export default function Studio({ page }: { page: string }) {
+export default function Studio({
+  page,
+  routeTaskId = "",
+  routeAgent = "",
+}: {
+  page: string;
+  routeTaskId?: string;
+  routeAgent?: string;
+}) {
   const router = useRouter();
   const [preferences, updatePreferences] = useDesktopPreferences();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [updatedAt, setUpdatedAt] = useState(0);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [initialTask, setInitialTask] = useState("");
+  const [pauseConfirm, setPauseConfirm] = useState(false);
+  function openNewTask(initial = "") {
+    setInitialTask(initial);
+    setNewTaskOpen(true);
+  }
   const [noticeError, setNoticeError] = useState(false);
   const [focusedTaskId, setFocusedTaskId] = useState("");
   const [taskFocusVersion, setTaskFocusVersion] = useState(0);
@@ -98,13 +119,16 @@ export default function Studio({ page }: { page: string }) {
     };
     document.querySelector(".main")?.scrollTo({ top: 0 });
     document.addEventListener("keydown", key);
-    setFocusedTaskId(new URLSearchParams(location.search).get("task") || "");
-    const agent = new URLSearchParams(location.search).get("agent");
+    setFocusedTaskId(
+      routeTaskId || new URLSearchParams(location.search).get("task") || "",
+    );
+    const agent =
+      routeAgent || new URLSearchParams(location.search).get("agent");
     if (agent && agent in roles) setSelectedAgent(agent);
     const game = localStorage.getItem("forge-game");
     if (game) setSelectedGame(game);
     return () => document.removeEventListener("keydown", key);
-  }, [page]);
+  }, [page, routeTaskId, routeAgent]);
   function chooseGame(id: string) {
     setSelectedGame(id);
     localStorage.setItem("forge-game", id);
@@ -212,7 +236,11 @@ export default function Studio({ page }: { page: string }) {
     e.preventDefault();
     const form = e.currentTarget;
     const content = String(new FormData(form).get("content") || "");
-    const result = await act("chat", { content, gameId: selectedGame });
+    const result = await act("chat", {
+      content,
+      gameId: selectedGame,
+      reviewPlan: new FormData(form).get("reviewPlan") === "on",
+    });
     if (result) form.reset();
     return !!result;
   }
@@ -241,6 +269,10 @@ export default function Studio({ page }: { page: string }) {
         maxLength={20000}
         placeholder="Describe your game, a new feature, or something to fix…"
       />
+      <label className="checkbox v2-plan-toggle">
+        <input type="checkbox" name="reviewPlan" />
+        Review Lead’s plan before specialists start
+      </label>
       <div className="composer-bottom">
         <span>
           <span className="dot purple" /> Lead will plan and delegate to your
@@ -267,6 +299,7 @@ export default function Studio({ page }: { page: string }) {
       openSearch={() => setPaletteOpen(true)}
       openShortcuts={() => setShortcutsOpen(true)}
       selectAgent={setSelectedAgent}
+      newTask={() => openNewTask()}
     >
       {shortcutsOpen && <Shortcuts close={() => setShortcutsOpen(false)} />}
       {paletteOpen && (
@@ -290,6 +323,31 @@ export default function Studio({ page }: { page: string }) {
           }}
         />
       )}
+      {data && newTaskOpen && (
+        <NewTaskDialog
+          data={data}
+          gameId={selectedGame}
+          initial={initialTask}
+          act={act}
+          busy={busy}
+          close={() => setNewTaskOpen(false)}
+        />
+      )}
+      {pauseConfirm && (
+        <ConfirmDialog
+          title="Pause all agents?"
+          confirmLabel="Pause all"
+          tone="neutral"
+          pending={busy}
+          close={() => setPauseConfirm(false)}
+          confirm={async () => {
+            if (await act("pause", { paused: true })) setPauseConfirm(false);
+          }}
+        >
+          Scheduling and future tool steps will pause. Operations already sent
+          to Studio may finish; recorded changes are preserved.
+        </ConfirmDialog>
+      )}
       <main id="main-content">
         <div className="page-title">
           <div>
@@ -306,6 +364,10 @@ export default function Studio({ page }: { page: string }) {
                     reviews: "Approve tool calls and accept verified work.",
                     logs: "Inspect worker events and API usage.",
                     settings: "Connections, spending limits and appearance.",
+                    pitches:
+                      "Develop versioned game concepts with source evidence.",
+                    market:
+                      "Research opportunities from attributed market observations.",
                     library:
                       "Search official documentation and personal references.",
                   } as Record<string, string>
@@ -316,7 +378,11 @@ export default function Studio({ page }: { page: string }) {
           <Button
             variant="outline"
             disabled={!data || busy}
-            onClick={() => act("pause", { paused: !data?.settings.paused })}
+            onClick={() =>
+              data?.settings.paused
+                ? void act("pause", { paused: false })
+                : setPauseConfirm(true)
+            }
           >
             {data?.settings.paused ? <Play size={15} /> : <Pause size={15} />}{" "}
             {data?.settings.paused ? "Resume team" : "Pause team"}
@@ -347,327 +413,63 @@ export default function Studio({ page }: { page: string }) {
             data={data}
             busy={busy}
             selectedGame={selectedGame}
+            act={act}
             send={send}
           />
         )}
         {data && page === "chat" && (
-          <div className="chat-layout">
-            <section className="panel chat-panel">
-              <div className="panel-heading">
-                <h3>
-                  <Avatar name="Lead" size="mini" /> Lead{" "}
-                  <span className="subtle">Task orchestrator</span>
-                </h3>
-                <Badge
-                  value={data.keyConfigured ? "ready" : "not configured"}
-                />
-              </div>
-              <div className="messages">
-                {data.chat.length ? (
-                  data.chat.map((m: any) => (
-                    <div className={`message ${m.role}`} key={m.id}>
-                      {m.role === "assistant" && (
-                        <Avatar name="Lead" size="mini" />
-                      )}
-                      <div>
-                        <small>
-                          {m.role === "user" ? "You" : "Lead"} ·{" "}
-                          {date(m.created)}
-                        </small>
-                        <div className="message-content">{m.content}</div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <Empty
-                    icon={<Sparkles />}
-                    title="No conversation yet"
-                    text="Select a target game and describe a change, including acceptance criteria."
-                  />
-                )}
-              </div>
-              {composer}
-            </section>
-            <section className="panel chat-context">
-              <h3>How your team works</h3>
-              {[
-                ["01", "Plan", "Lead turns your request into a task graph."],
-                ["02", "Build", "Up to three specialists work independently."],
-                ["03", "Verify", "Tester checks changes in Roblox Studio."],
-                ["04", "Review", "You approve the finished work."],
-              ].map(([n, t, d]) => (
-                <div className="workflow-step" key={n}>
-                  <b>{n}</b>
-                  <div>
-                    <strong>{t}</strong>
-                    <p>{d}</p>
-                  </div>
-                </div>
-              ))}
-              <div className="callout">
-                <ShieldCheck size={19} />
-                <p>
-                  Studio changes pause for your approval. Find the exact tool
-                  arguments in Reviews.
-                </p>
-              </div>
-            </section>
-          </div>
+          <LeadWorkspace
+            data={data}
+            selectedGame={selectedGame}
+            composer={composer}
+            act={act}
+            busy={busy}
+          />
         )}
         {data && page === "team" && (
-          <>
-            <div className="team-grid">
-              {data.agents.map((a: any) => (
-                <button
-                  key={a.name}
-                  className={`panel team-card ${selectedAgent === a.name ? "selected" : ""}`}
-                  onClick={() => setSelectedAgent(a.name)}
-                >
-                  <div className="team-head">
-                    <Avatar name={a.name} />
-                    <Badge
-                      value={
-                        !a.enabled
-                          ? "disabled"
-                          : running.some((t) => t.agent === a.name)
-                            ? "running"
-                            : "idle"
-                      }
-                    />
-                  </div>
-                  <h2>{a.name}</h2>
-                  <p>{roles[a.name as Role].title}</p>
-                  <small>{a.model}</small>
-                  <div className="team-metrics">
-                    <span>
-                      {
-                        tasks.filter(
-                          (t) => t.agent === a.name && t.status === "completed",
-                        ).length
-                      }{" "}
-                      tasks completed
-                    </span>
-                    <span>
-                      {
-                        data.memories.filter((m: any) => m.agent === a.name)
-                          .length
-                      }{" "}
-                      memories
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-            <AgentForm
-              key={selectedAgent}
-              agent={data.agents.find((a: any) => a.name === selectedAgent)}
-              busy={busy}
-              save={(b) => act("agents", b)}
-            />
-            <section className="panel spaced">
-              <h3>{selectedAgent}’s memory & history</h3>
-              {data.memories
-                .filter((m: any) => m.agent === selectedAgent)
-                .map((m: any) => (
-                  <pre key={m.id} className="memory">
-                    {m.content}
-                  </pre>
-                ))}
-              {!data.memories.some((m: any) => m.agent === selectedAgent) && (
-                <p className="muted-text">
-                  This agent has no saved memories yet.
-                </p>
-              )}
-            </section>
-          </>
+          <AgentWorkspace
+            data={data}
+            selectedAgent={selectedAgent}
+            selectAgent={setSelectedAgent}
+            selectedGame={selectedGame}
+            act={act}
+            busy={busy}
+          />
         )}
         {data && page === "tasks" && (
-          <>
-            <section className="panel queue-summary">
-              <div>
-                <h3>Task progress</h3>
-                <p>
-                  {done.length} of {tasks.length} tasks completed ·{" "}
-                  {running.length} running · {approvals.length} waiting for
-                  approval
-                </p>
-              </div>
-              <progress
-                aria-label="Completed tasks"
-                max={Math.max(tasks.length, 1)}
-                value={done.length}
-              />
-            </section>
-            <div className="toolbar">
-              <div className="tabs">
-                {[
-                  "all",
-                  "queued",
-                  "running",
-                  "approval",
-                  "completed",
-                  "failed",
-                ].map((f) => (
-                  <button
-                    className={filter === f ? "current" : ""}
-                    onClick={() => setFilter(f)}
-                    key={f}
-                  >
-                    {f}
-                  </button>
-                ))}
-              </div>
-              <input
-                aria-label="Search tasks"
-                placeholder="Search tasks…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </div>
-            <section className="panel task-list">
-              {tasks
-                .filter(
-                  (t) =>
-                    (filter === "all" || t.status === filter) &&
-                    t.title.toLowerCase().includes(query.toLowerCase()),
-                )
-                .map((t) => (
-                  <details
-                    key={t.id}
-                    id={`task-${t.id}`}
-                    className="task-detail"
-                  >
-                    <summary>
-                      <TaskRow t={t} />
-                    </summary>
-                    <div className="task-body">
-                      <p>{t.instructions}</p>
-                      <small>
-                        Task {t.id} · Attempt {t.attempts} · {t.steps} model
-                        steps
-                      </small>
-                      <p>
-                        Depends on:{" "}
-                        {JSON.parse(t.deps)
-                          .map(
-                            (id: string) =>
-                              tasks.find((x) => x.id === id)?.title || id,
-                          )
-                          .join(", ") || "No dependencies"}
-                      </p>
-                      {t.error && <p className="failure">{t.error}</p>}
-                      {t.result && <pre>{t.result}</pre>}
-                      {["failed", "blocked"].includes(t.status) && (
-                        <Button
-                          size="sm"
-                          onClick={() => act("retry", { id: t.id })}
-                        >
-                          Retry task
-                        </Button>
-                      )}
-                    </div>
-                  </details>
-                ))}
-              {!tasks.length && (
-                <Empty
-                  icon={<GitBranch />}
-                  title="No tasks yet"
-                  text="Send your first request to Lead to create a real task graph."
-                />
-              )}
-            </section>
-          </>
+          <TaskWorkspace
+            data={data}
+            act={act}
+            busy={busy}
+            newTask={() => openNewTask()}
+            focusedTaskId={focusedTaskId}
+            focusVersion={taskFocusVersion}
+          />
         )}
         {data && page === "games" && (
-          <div className="two-columns">
-            <section>
-              <div className="section-heading">
-                <h2>Your games</h2>
-                <Button
-                  variant="outline"
-                  disabled={busy}
-                  onClick={async () => {
-                    const r = await act("studios", {});
-                    if (r) setNotice(JSON.stringify(r.content, null, 2));
-                  }}
-                >
-                  <Link2 size={15} /> Discover Studios
-                </Button>
-              </div>
-              {data.games.map((g: any) => (
-                <div className="panel game-card" key={g.id}>
-                  <div className="game-art">
-                    <Box size={44} />
-                    <span className="game-grid" />
-                  </div>
-                  <div>
-                    <h2>{g.name}</h2>
-                    <p>Studio instance: {g.studio_id}</p>
-                    <Badge
-                      value={g.id === selectedGame ? "selected" : "connected"}
-                    />
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => chooseGame(g.id)}
-                    >
-                      Use this game <ArrowRight size={14} />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              {!data.games.length && (
-                <section className="panel">
-                  <Empty
-                    icon={<Gamepad2 />}
-                    title="No games registered"
-                    text="Connect the official Studio MCP server, discover an instance, and register it below."
-                  />
-                </section>
-              )}
-            </section>
-            <form
-              className="panel form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const f = new FormData(e.currentTarget);
-                void act("games", {
-                  name: f.get("name"),
-                  studioId: f.get("studioId"),
-                });
-              }}
-            >
-              <h3>
-                <Plus size={17} /> Add a game
-              </h3>
-              <label>
-                Game name
-                <input
-                  name="name"
-                  required
-                  placeholder="My Roblox experience"
-                />
-              </label>
-              <label>
-                Studio instance ID
-                <input
-                  name="studioId"
-                  required
-                  placeholder="ID from Discover Studios"
-                />
-              </label>
-              <p>
-                Open the place in Roblox Studio, enable the official MCP server,
-                and copy the instance ID returned by discovery.
-              </p>
-              <Button disabled={busy}>
-                Add game <Plus size={14} />
-              </Button>
-            </form>
-          </div>
+          <GameOps
+            data={data}
+            selectedGame={selectedGame}
+            chooseGame={chooseGame}
+            act={act}
+            busy={busy}
+            newTask={openNewTask}
+          />
+        )}
+        {data && page === "market" && (
+          <Market data={data} act={act} newTask={openNewTask} />
+        )}
+        {data && page === "pitches" && (
+          <Pitches data={data} act={act} busy={busy} chooseGame={chooseGame} />
         )}
         {data && page === "reviews" && (
-          <Reviews data={data} busy={busy} act={act} />
+          <Reviews
+            data={data}
+            busy={busy}
+            act={act}
+            newTask={openNewTask}
+            selectedGame={selectedGame}
+          />
         )}
         {data && page === "logs" && (
           <>
@@ -725,7 +527,15 @@ export default function Studio({ page }: { page: string }) {
             </section>
           </>
         )}
-        {page === "library" && <Library />}
+        {page === "library" && (
+          <LibraryHub
+            data={data}
+            selectedGame={selectedGame}
+            act={act}
+            busy={busy}
+            newTask={openNewTask}
+          />
+        )}
         {data && page === "settings" && (
           <>
             <Appearance
@@ -799,74 +609,6 @@ function Events({ events }: { events: any[] }) {
         <p className="muted-text">Activity appears as your worker runs.</p>
       )}
     </div>
-  );
-}
-function AgentForm({
-  agent: a,
-  busy,
-  save,
-}: {
-  agent: any;
-  busy: boolean;
-  save: (b: any) => void;
-}) {
-  return (
-    <form
-      className="panel form spaced"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const f = new FormData(e.currentTarget);
-        save({
-          name: a.name,
-          model: f.get("model"),
-          temperature: Number(f.get("temperature")),
-          max_tokens: Number(f.get("max_tokens")),
-          enabled: f.get("enabled") === "on",
-          prompt: f.get("prompt"),
-        });
-      }}
-    >
-      <h3>
-        <Avatar name={a.name} size="mini" />
-        {a.name} configuration
-      </h3>
-      <div className="form-grid">
-        <label>
-          OpenRouter model ID
-          <input name="model" defaultValue={a.model} required />
-        </label>
-        <label>
-          Temperature
-          <input
-            name="temperature"
-            type="number"
-            min="0"
-            max="2"
-            step="0.1"
-            defaultValue={a.temperature}
-          />
-        </label>
-        <label>
-          Maximum output tokens
-          <input
-            name="max_tokens"
-            type="number"
-            min="256"
-            max="16000"
-            defaultValue={a.max_tokens}
-          />
-        </label>
-      </div>
-      <label>
-        Independent system prompt
-        <textarea name="prompt" rows={4} defaultValue={a.prompt} required />
-      </label>
-      <label className="checkbox">
-        <input type="checkbox" name="enabled" defaultChecked={!!a.enabled} />{" "}
-        Agent enabled
-      </label>
-      <Button disabled={busy}>Save agent settings</Button>
-    </form>
   );
 }
 function SettingsForm({

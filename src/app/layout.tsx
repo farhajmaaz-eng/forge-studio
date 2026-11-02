@@ -1,4 +1,5 @@
 import "./globals.css";
+import "./features.css";
 import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Forge — Roblox Development Studio",

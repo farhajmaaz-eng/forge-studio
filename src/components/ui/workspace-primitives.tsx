@@ -8,9 +8,11 @@ export function DetailDrawer({
   subtitle,
   close,
   children,
+  wide = false,
 }: {
   title: string;
   subtitle?: string;
+  wide?: boolean;
   close: () => void;
   children: ReactNode;
 }) {
@@ -18,12 +20,13 @@ export function DetailDrawer({
   useEffect(() => {
     const dialog = ref.current;
     dialog?.showModal();
-    return () => dialog?.close();
+    // Removing a dialog from the DOM releases its modal state. Calling close
+    // during effect cleanup also fires onClose during Strict Mode replays.
   }, []);
   return (
     <dialog
       ref={ref}
-      className="detail-drawer"
+      className={`detail-drawer ${wide ? "v2-wide-drawer" : ""}`}
       aria-labelledby="drawer-title"
       onClose={close}
       onClick={(e) => {
@@ -33,13 +36,13 @@ export function DetailDrawer({
       <div className="drawer-content">
         <header className="drawer-heading">
           <div>
-            <span className="section-kicker">Review details</span>
+            <span className="section-kicker">Details</span>
             <h2 id="drawer-title">{title}</h2>
             {subtitle && <p>{subtitle}</p>}
           </div>
           <button
             className="icon-link"
-            aria-label="Close review"
+            aria-label="Close details"
             onClick={() => ref.current?.close()}
           >
             <X size={18} />
@@ -58,6 +61,7 @@ export function ConfirmDialog({
   pending,
   close,
   confirm,
+  tone = "destructive",
 }: {
   title: string;
   children: ReactNode;
@@ -65,12 +69,14 @@ export function ConfirmDialog({
   pending: boolean;
   close: () => void;
   confirm: () => Promise<void>;
+  tone?: "destructive" | "approval" | "neutral";
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const dialog = ref.current;
     dialog?.showModal();
-    return () => dialog?.close();
+    // Removing a dialog from the DOM releases its modal state. Calling close
+    // during effect cleanup also fires onClose during Strict Mode replays.
   }, []);
   return (
     <dialog
@@ -89,7 +95,8 @@ export function ConfirmDialog({
           Cancel
         </Button>
         <Button
-          variant="destructive"
+          variant={tone === "destructive" ? "destructive" : "outline"}
+          className={tone === "approval" ? "approve-button" : ""}
           disabled={pending}
           onClick={() => void confirm()}
         >

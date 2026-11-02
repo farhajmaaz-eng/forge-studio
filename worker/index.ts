@@ -9,6 +9,13 @@ import { active, recover, tick } from "./runtime";
 import { refreshModels } from "./model";
 import { roles } from "../src/lib/roles";
 import { librarySearch, libraryRead, libraryAction } from "./library";
+import {
+  featureAction,
+  featureRead,
+  assetFile,
+  decideApproval,
+  decideRun,
+} from "./features";
 let connecting = false;
 async function reconnect() {
   if (connecting) throw new Error("Connection already in progress");
@@ -23,30 +30,8 @@ async function reconnect() {
 }
 async function action(path: string, b: any) {
   if (path.startsWith("library/")) return libraryAction(path.slice(8), b);
-  if (path === "chat") {
-    const a = z
-      .object({
-        content: z.string().min(1).max(20000),
-        gameId: z.string().optional(),
-      })
-      .parse(b);
-    const game: any = a.gameId
-      ? db.prepare("SELECT * FROM games WHERE id=?").get(a.gameId)
-      : null;
-    if (!game) throw new Error("Add and select a Studio game in Games first.");
-    const id = randomUUID();
-    db.transaction(() => {
-      db.prepare(
-        "INSERT INTO runs(id,request,game_id,studio_id) VALUES (?,?,?,?)",
-      ).run(id, a.content, game.id, game.studio_id);
-      db.prepare(
-        "INSERT INTO chat(id,role,content,run_id) VALUES (?,'user',?,?)",
-      ).run(randomUUID(), a.content, id);
-      addTask(id, "Lead", "Plan: " + a.content.slice(0, 70), a.content);
-    })();
-    event("New request received", "Lead");
-    return { id };
-  }
+  const featureResult = featureAction(path, b, active);
+  if (featureResult !== undefined) return featureResult;
   if (path === "settings") {
     const a = z
       .object({
@@ -116,38 +101,20 @@ async function action(path: string, b: any) {
     const a = z
       .object({
         name: z.string().min(1).max(200),
-        studioId: z.string().min(1).max(200),
+        studioId: z.string().max(200).default(""),
       })
       .parse(b);
-    db.prepare("INSERT INTO games(id,name,studio_id) VALUES (?,?,?)").run(
+    db.prepare(
+      "INSERT INTO games(id,name,studio_id,stage) VALUES (?,?,?,?)",
+    ).run(
       randomUUID(),
       a.name,
       a.studioId,
+      a.studioId ? "prototype" : "concept",
     );
     return { ok: true };
   }
-  if (path === "approve") {
-    const a = z.object({ id: z.string(), approved: z.boolean() }).parse(b);
-    db.transaction(() => {
-      const ap: any = db
-        .prepare("SELECT * FROM approvals WHERE id=?")
-        .get(a.id);
-      if (!ap || ap.status !== "pending")
-        throw new Error("Approval is no longer pending");
-      db.prepare("UPDATE approvals SET status=? WHERE id=?").run(
-        a.approved ? "approved" : "rejected",
-        a.id,
-      );
-      db.prepare(
-        "UPDATE tasks SET status='queued' WHERE id=? AND status='approval'",
-      ).run(ap.task_id);
-    })();
-    event(
-      a.approved ? "Studio change approved" : "Studio change rejected",
-      "User",
-    );
-    return { ok: true };
-  }
+  if (path === "approve") return decideApproval(b);
   if (path === "resolve") {
     const a = z
       .object({
@@ -171,6 +138,19 @@ async function action(path: string, b: any) {
   if (path === "retry") {
     const a = z.object({ id: z.string() }).parse(b);
     const t = task(a.id);
+    const run: any = t
+      ? db.prepare("SELECT status FROM runs WHERE id=?").get(t.run_id)
+      : null;
+    if (run?.status === "cancelled")
+      throw new Error("Create new work for a cancelled run");
+    if (
+      db
+        .prepare(
+          "SELECT id FROM attention_requests WHERE task_id=? AND status='pending' LIMIT 1",
+        )
+        .get(a.id)
+    )
+      throw new Error("Answer the pending question on Home before retrying");
     if (!t || !["failed", "blocked"].includes(t.status))
       throw new Error("Task cannot be retried");
     if (
@@ -191,30 +171,7 @@ async function action(path: string, b: any) {
     ).run(t.run_id);
     return { ok: true };
   }
-  if (path === "review") {
-    const a = z
-      .object({
-        id: z.string(),
-        accepted: z.boolean(),
-        feedback: z.string().default(""),
-      })
-      .parse(b);
-    const r: any = db.prepare("SELECT * FROM runs WHERE id=?").get(a.id);
-    if (r?.status !== "review") throw new Error("Run is not ready for review");
-    if (a.accepted) {
-      db.prepare("UPDATE runs SET status='accepted' WHERE id=?").run(a.id);
-    } else {
-      if (a.feedback.length < 5)
-        throw new Error("Describe the requested changes");
-      db.prepare("UPDATE runs SET status='active' WHERE id=?").run(a.id);
-      addTask(a.id, "Lead", "Revise after review", a.feedback);
-    }
-    event(
-      a.accepted ? "Request accepted" : `Revision requested: ${a.feedback}`,
-      "User",
-    );
-    return { ok: true };
-  }
+  if (path === "review") return decideRun(b);
   throw new Error("Unknown action");
 }
 const server = http.createServer(async (req, res) => {
@@ -227,6 +184,24 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", "http://localhost");
     const path = url.pathname.slice(1);
+    if (req.method === "GET" && path === "assets/file") {
+      const file = assetFile(url.searchParams.get("id") || "");
+      res.setHeader("Content-Type", file.mime);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader(
+        "Content-Disposition",
+        `${file.inline ? "inline" : "attachment"}; filename="${file.filename}"`,
+      );
+      res.end(file.bytes);
+      return;
+    }
+    if (req.method === "GET") {
+      const result = featureRead(path, url.searchParams);
+      if (result !== undefined) {
+        res.end(JSON.stringify(result));
+        return;
+      }
+    }
     if (req.method === "GET" && path === "library") {
       res.end(
         JSON.stringify(
@@ -259,7 +234,15 @@ const server = http.createServer(async (req, res) => {
     let raw = "";
     for await (const c of req) {
       raw += c;
-      if (raw.length > 128000) throw new Error("Request too large");
+      if (
+        raw.length >
+        (path === "assets/save"
+          ? 3000000
+          : ["market/import", "telemetry/import"].includes(path)
+            ? 1000000
+            : 128000)
+      )
+        throw new Error("Request too large");
     }
     const result = await action(path, JSON.parse(raw || "{}"));
     res.end(JSON.stringify(result));
