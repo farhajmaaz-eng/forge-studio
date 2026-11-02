@@ -1,6 +1,7 @@
 "use client";
 import { Button } from "./ui/button";
 import { Avatar } from "./agent-avatar";
+import { nvidiaFreeModelIds } from "@/lib/model-presets";
 export default function AgentForm({
   agent: a,
   busy,
@@ -32,8 +33,22 @@ export default function AgentForm({
       </h3>
       <div className="form-grid">
         <label>
-          OpenRouter model ID
-          <input name="model" defaultValue={a.model} required />
+          NVIDIA free model
+          <select
+            name="model"
+            defaultValue={
+              nvidiaFreeModelIds.includes(a.model)
+                ? a.model
+                : nvidiaFreeModelIds[0]
+            }
+            required
+          >
+            {nvidiaFreeModelIds.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           Temperature

@@ -22,6 +22,7 @@ export function migrateFeatures(db: Database.Database) {
         request_key: "TEXT",
         plan_status: "TEXT NOT NULL DEFAULT 'automatic'",
       },
+      usage: { provider: "TEXT NOT NULL DEFAULT 'openrouter'" },
       approvals: {
         note: "TEXT NOT NULL DEFAULT ''",
         reviewer: "TEXT",

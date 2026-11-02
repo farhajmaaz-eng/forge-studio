@@ -53,6 +53,31 @@ export function UsagePanel({
   compact?: boolean;
 }) {
   if (!data || !Number.isFinite(data.settings.cap)) return null;
+  if (data.provider?.id === "nvidia")
+    return (
+      <section
+        className={`usage-panel ${compact ? "compact" : ""}`}
+        aria-label="NVIDIA trial usage"
+      >
+        <div className="usage-heading">
+          <Gauge size={15} />
+          <strong>Free-endpoint usage</strong>
+          <Link href="/settings">Settings</Link>
+        </div>
+        <p>
+          {(
+            (data.spend.nimInputTokens || 0) + (data.spend.nimOutputTokens || 0)
+          ).toLocaleString()}{" "}
+          tokens recorded
+        </p>
+        <small>Hosted trial · NVIDIA limits apply</small>
+        {!compact && (
+          <Link className="text-link" href="/logs">
+            See all usage <ChevronDown size={12} />
+          </Link>
+        )}
+      </section>
+    );
   const { cost, reserved } = data.spend;
   const cap = data.settings.cap;
   const percent = cap > 0 ? Math.round(((cost + reserved) / cap) * 100) : 0;

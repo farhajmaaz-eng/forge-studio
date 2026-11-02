@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 const dir = mkdtempSync(resolve(tmpdir(), "forge-stream-billing-"));
 process.env.FORGE_DATA_DIR = dir;
+process.env.MODEL_PROVIDER = "openrouter";
 process.env.OPENROUTER_API_KEY = "test-only-never-sent-to-network";
 const { db, set } = await import("../worker/store");
 const { completion } = await import("../worker/model");

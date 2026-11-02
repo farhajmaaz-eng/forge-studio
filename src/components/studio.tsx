@@ -31,6 +31,7 @@ import { roles, type Role } from "@/lib/roles";
 import { Avatar } from "./agent-avatar";
 import Overview from "./overview";
 import LibraryHub from "./library-hub";
+import ProviderSettings from "./provider-settings";
 import TaskWorkspace, { NewTaskDialog } from "./task-workspace";
 import AgentWorkspace, { LeadWorkspace } from "./agent-workspace";
 import GameOps from "./game-ops";
@@ -209,6 +210,7 @@ export default function Studio({
           {
             chat: "Request queued",
             settings: "Settings saved",
+            "provider/save": "Provider settings saved",
             agents: "Agent settings saved",
             approve: "Approval recorded",
             review: "Review recorded",
@@ -508,10 +510,10 @@ export default function Studio({
                         <td>{date(u.created)}</td>
                         <td>{u.agent}</td>
                         <td>{u.model}</td>
-                        <td>{u.input_tokens || "—"}</td>
-                        <td>{u.output_tokens || "—"}</td>
+                        <td>{u.input_tokens ?? "—"}</td>
+                        <td>{u.output_tokens ?? "—"}</td>
                         <td>
-                          {money(u.cost)}
+                          {u.cost === null ? "Not reported" : money(u.cost)}
                           {u.reserved > 0 && (
                             <small> + {money(u.reserved)} reserved</small>
                           )}
@@ -685,7 +687,7 @@ function SettingsForm({
         </h3>
         <div className="form-grid">
           <label>
-            Workspace spending cap (USD)
+            Workspace spending cap (USD · priced providers)
             <input
               name="cap"
               type="number"
@@ -706,6 +708,12 @@ function SettingsForm({
             />
           </label>
         </div>
+        {data.provider?.id === "nvidia" ? (
+          <p>
+            NIM token usage is tracked separately. NVIDIA pricing is not
+            supplied, so the USD cap below does not cover unpriced NIM calls.
+          </p>
+        ) : null}
         <progress
           aria-label="Budget committed"
           max={s.cap || 1}
@@ -719,23 +727,7 @@ function SettingsForm({
         <Button disabled={busy}>Save configuration</Button>
       </form>
       <div>
-        <section className="panel form">
-          <h3>
-            <Zap size={18} /> OpenRouter
-          </h3>
-          <Badge value={data.keyConfigured ? "configured" : "not configured"} />
-          <p>
-            Set <code>OPENROUTER_API_KEY</code> in your local <code>.env</code>,
-            then restart the worker. Keys stay in the server process.
-          </p>
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() => act("models", {})}
-          >
-            Refresh models & pricing
-          </Button>
-        </section>
+        <ProviderSettings data={data} act={act} busy={busy} />
         <section className="panel form spaced">
           <h3>
             <Radio size={18} /> Studio bridge

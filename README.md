@@ -6,13 +6,13 @@ A local-first Roblox AI development studio built with Next.js, TypeScript, Tailw
 
 ## Start here
 
-Requires Node.js 22+, npm, an OpenRouter API key with credit, and current Roblox Studio **on the same Windows/macOS machine as the worker**. Roblox Studio is not available natively on this Linux build machine.
+Requires Node.js 22+, npm, an NVIDIA Developer API key for the hosted free endpoints, and current Roblox Studio **on the same Windows/macOS machine as the worker**. Roblox Studio is not available natively on this Linux build machine.
 
 ```bash
 cd /root/forge-studio
 npm ci
 cp .env.example .env
-# Edit .env: add OPENROUTER_API_KEY and Studio's official MCP command.
+# Configure Studio's official MCP command. Enter your NVIDIA key in Settings after launch.
 npm run worker
 ```
 
@@ -33,7 +33,7 @@ To copy this project to a Studio computer, copy the directory excluding `node_mo
 3. On macOS the official executable is `/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP` with arguments `[]`.
 4. On Windows use executable `cmd.exe` and arguments `["/c","C:\\Users\\YOU\\AppData\\Local\\Roblox\\mcp.bat"]`. Use an absolute path with your actual username (environment variables inside JSON arguments are not automatically expanded by this app).
 5. Games → **Discover Studios**. Copy the returned `studio_id`, enter a game name and that ID, then add the game. Each request pins its target Studio ID; changing the selected game cannot redirect an existing run.
-6. Set `OPENROUTER_API_KEY` in `.env` and restart the worker. Default verified catalog model ID: `deepseek/deepseek-v4.1-flash`. Every agent has an independently configurable model, prompt, temperature, token limit and enabled state under Team.
+6. Open **Settings → Model provider**, enter your own NVIDIA key, leave **Apply recommended models** checked, and save. No key is embedded in this repository. Team lets you choose among the approved free-endpoint models and configure each agent’s prompt, temperature, token limit and enabled state. See [NVIDIA setup](docs/NVIDIA_PROVIDER.md).
 7. Send a request in Lead Chat. Lead makes a dependency graph; specialists inspect and implement through real MCP calls. Go to Reviews to inspect and approve the exact arguments of every mutation, including Luau execution and play controls. The task resumes on approval.
 8. Tester independently reads the implementation, starts a playtest, collects console evidence, stops playtesting and records a verdict. Passing work enters user review; accept it or request changes. New implementation handoffs and revisions require new verification.
 
@@ -43,7 +43,7 @@ Suggested first request: “Add a server-side checkpoint system to my obby. Pres
 
 - **Next.js** serves eleven responsive dashboard pages and a same-origin API proxy. All privileged operations go through the local worker. No browser-bundled API keys.
 - **Worker** (`worker/index.ts`) binds to `127.0.0.1:4318`. Authenticated HTTP uses a random 0600 local token, and WebSocket broadcasts only refresh notifications. The UI fetches protected snapshots through Next. HTTP polling is the fallback. `WORKER_PORT` is configurable; restart both processes when changing it.
-- **Seven independent agents** each have isolated prompts, persistent memory, conversation/tool context, role-based tools, task histories and execution cycles. Lead delegates; Architect designs; Builder codes Luau; Frame builds UI; Scenic builds worlds; Balance tunes economies; Tester checks behavior. Every model turn is a genuine separate OpenRouter request; there is no production simulator or seeded activity.
+- **Seven independent agents** each have isolated prompts, persistent memory, conversation/tool context, role-based tools, task histories and execution cycles. Lead delegates; Architect designs; Builder codes Luau; Frame builds UI; Scenic builds worlds; Balance tunes economies; Tester checks behavior. Every model turn is a genuine separate request to the configured model provider; there is no production simulator or seeded activity.
 - **LangGraph** runs reason/tool phases with persistent SQLite checkpoints per task thread. Task messages and tool outcomes are separately persisted to support partial tool batches and restart recovery. The SQLite dependency scheduler runs at most three workers concurrently and one task per agent. Dependencies, retries with backoff, handoffs, blocked-task recovery, step limits and user review are durable.
 - **Studio access** uses SDK stdio transport and discovered official tool schemas. Tool lists are intersected with role allowlists. A per-Studio database lock serializes all place operations, including reads, so agents never inspect a partially applied concurrent operation. Approval decisions bind to persisted tool call IDs and exact payloads. Unknown tools are denied; arbitrary Luau is always considered a mutation.
 - **Recovery** uses a tool-call ledger to prevent reapplying finished operations. If a write was interrupted or returned an ambiguous transport error, the task fails rather than replaying the call. Reviews shows uncertain operations: inspect Studio, record whether the call took effect, then retry the task in Tasks. Reservations for ambiguous provider calls remain counted against the cap.
@@ -51,9 +51,9 @@ Suggested first request: “Add a server-side checkpoint system to my obby. Pres
 
 ### Spending behavior
 
-The cap defaults to **$9** for the lifetime of this local database, across all agents and games. The worker retrieves the OpenRouter catalog and pricing. Before each call it transactionally reserves a conservative upper bound using the model’s entire context window at the higher token price, with an additional margin. These reservations count against the cap during parallel requests. This deliberately may prevent a request well before the remaining budget is exhausted. Settings shows actual spending and reservations separately.
+The default NVIDIA setup calls only a curated allowlist of hosted models whose NVIDIA pages offer a **Free Endpoint**. It does not route to partner endpoints or fall back to paid providers. NVIDIA’s developer trial limits and availability apply; no unlimited quota is invented. Settings supports entering, rotating and removing your own key, stored only in a private server-side file under the data directory.
 
-Successful calls record prompt/completion tokens and provider-reported `usage.cost`; if the provider omits cost, the ledger explicitly labels the catalog calculation as estimated. Unknown network outcomes retain reservations; definitive rejected requests release them. No local application can enforce a provider account’s billing policy or future price changes: also set an OpenRouter key credit limit for an account-level ceiling. There is no UI to silently discard an uncertain charge.
+NVIDIA calls record actual token counts when supplied. Missing token counts or dollar costs remain unknown; they are not replaced with invented zero prices. The sidebar shows trial token usage. Historical priced usage and the existing USD cap remain in the database; the old priced-provider adapter is retained for explicit legacy deployments and regression tests, but is not offered in the free-endpoint setup. See [accounting details](docs/NVIDIA_PROVIDER.md).
 
 ### Approval and rollback boundaries
 
@@ -76,7 +76,7 @@ node scripts/library-smoke.mjs
 node scripts/redesign-smoke.mjs
 ```
 
-The integration test replaces **only model responses** with deterministic test responses and launches a **test-only MCP stdio server** through the actual SDK. It verifies Lead delegation → queued Builder → approval before file modification → independent Tester read/play/console evidence → user review, plus budget reservations, unauthorized-tool rejection and restart recovery. The test does not spend OpenRouter credit and is not a real Roblox playtest.
+The integration test replaces **only model responses** with deterministic test responses and launches a **test-only MCP stdio server** through the actual SDK. It verifies Lead delegation → queued Builder → approval before file modification → independent Tester read/play/console evidence → user review, plus budget reservations, unauthorized-tool rejection and restart recovery. The test does not call a paid provider and is not a real Roblox playtest.
 
 Browser smoke checks visit all nine pages, check console errors and mobile overflow, and write desktop/mobile screenshots to `artifacts/`. The extended UI check covers 1440px, 768px and 390px layouts, quick prompts, Ctrl/Cmd+K navigation, Escape handling, and agent selection during live refreshes. Approval-state fixtures stay in browser request interception and never enter the application database. The redesign check additionally covers populated reviews from 320px to 1540px, partial batch failures, rejection cancellation, media inspection, revision feedback, acceptance, uncertain-operation recovery, and mobile navigation.
 
@@ -84,15 +84,15 @@ The dashboard includes a compact Lead request bar, actionable setup and approval
 
 **Verified here:** dependency installation; production build; TypeScript; SDK protocol integration workflow; budget, permissions and recovery tests; local UI/browser checks (see delivery report for results).
 
-**Requires your environment:** an actual paid OpenRouter completion and a live Roblox Studio modification/playtest. No API credential or running Studio instance was supplied, so neither can honestly be reported as live-verified. Configure both and follow the eight steps above to perform that final integration check.
+**Requires your environment:** enter your NVIDIA key manually and use **Test saved connection** for a short tool-call check. Real Studio modification/playtesting also requires your live Roblox Studio instance. Automated checks use synthetic credentials and stubbed inference, never a key pasted into chat.
 
 ## Official references
 
 - Roblox Studio MCP setup and current tool catalog: https://create.roblox.com/docs/studio/mcp
 - MCP TypeScript SDK: https://github.com/modelcontextprotocol/typescript-sdk
 - LangGraph persistence: https://docs.langchain.com/oss/javascript/langgraph/persistence
-- OpenRouter model catalog: https://openrouter.ai/api/v1/models
-- OpenRouter usage accounting: https://openrouter.ai/docs/use-cases/usage-accounting
+- NVIDIA model catalog: https://integrate.api.nvidia.com/v1/models
+- NVIDIA developer access: https://docs.api.nvidia.com/nim/docs/product
 
 ## Library
 

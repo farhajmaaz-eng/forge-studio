@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { randomUUID, randomBytes } from "node:crypto";
 import { roles } from "../src/lib/roles";
 import { migrateFeatures } from "./migrations";
+import { defaultAgentModel, providerStatus } from "./provider";
 export const dataDir = resolve(process.env.FORGE_DATA_DIR || ".data");
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 const secretPath = resolve(dataDir, "worker.secret");
@@ -53,11 +54,7 @@ for (const [key, value] of Object.entries(defaults))
 for (const [name, r] of Object.entries(roles))
   db.prepare(
     "INSERT OR IGNORE INTO agents (name,model,prompt) VALUES (?,?,?)",
-  ).run(
-    name,
-    process.env.OPENROUTER_MODEL || "deepseek/deepseek-v4.1-flash",
-    r.brief,
-  );
+  ).run(name, defaultAgentModel(name), r.brief);
 export function get<T = any>(key: string): T {
   return JSON.parse(
     (db.prepare("SELECT value FROM settings WHERE key=?").get(key) as any)
@@ -97,7 +94,7 @@ export function addTask(
 export function spent() {
   return db
     .prepare(
-      "SELECT COALESCE(SUM(cost),0) AS cost,COALESCE(SUM(reserved),0) AS reserved FROM usage",
+      "SELECT COALESCE(SUM(cost),0) AS cost,COALESCE(SUM(reserved),0) AS reserved,SUM(CASE WHEN cost IS NULL THEN 1 ELSE 0 END) AS unpriced,COALESCE(SUM(input_tokens),0) AS inputTokens,COALESCE(SUM(output_tokens),0) AS outputTokens,COALESCE(SUM(CASE WHEN provider='nvidia' THEN input_tokens ELSE 0 END),0) AS nimInputTokens,COALESCE(SUM(CASE WHEN provider='nvidia' THEN output_tokens ELSE 0 END),0) AS nimOutputTokens FROM usage",
     )
     .get() as any;
 }
@@ -169,6 +166,7 @@ export function snapshot() {
       .all(),
     spend: spent(),
     settings,
-    keyConfigured: !!process.env.OPENROUTER_API_KEY,
+    keyConfigured: providerStatus().configured,
+    provider: providerStatus(),
   };
 }

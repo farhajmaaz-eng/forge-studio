@@ -50,8 +50,8 @@ export default function Overview({
   const setup = [
     {
       ok: data.keyConfigured,
-      title: "OpenRouter API key",
-      description: "Set OPENROUTER_API_KEY in .env and restart the worker.",
+      title: `${data.provider?.label || "Model provider"} API key`,
+      description: "Enter your API key in Settings → Model provider.",
       href: "/settings",
     },
     {
@@ -95,17 +95,33 @@ export default function Overview({
           <label>{failed.length} failed or blocked</label>
         </div>
         <div>
-          <span>API budget</span>
-          <strong>
-            ${data.spend.cost.toFixed(4)}
-            <small> / ${data.settings.cap.toFixed(2)}</small>
-          </strong>
-          <progress
-            aria-label="Workspace budget committed"
-            value={data.spend.cost + data.spend.reserved}
-            max={data.settings.cap || 1}
-          />
-          <label>${data.spend.reserved.toFixed(4)} reserved</label>
+          {data.provider?.id === "nvidia" ? (
+            <>
+              <span>NVIDIA trial usage</span>
+              <strong>
+                {(
+                  (data.spend.nimInputTokens || 0) +
+                  (data.spend.nimOutputTokens || 0)
+                ).toLocaleString()}
+                <small> tokens</small>
+              </strong>
+              <label>Free endpoints · provider limits apply</label>
+            </>
+          ) : (
+            <>
+              <span>API budget</span>
+              <strong>
+                ${data.spend.cost.toFixed(4)}
+                <small> / ${data.settings.cap.toFixed(2)}</small>
+              </strong>
+              <progress
+                aria-label="Workspace budget committed"
+                value={data.spend.cost + data.spend.reserved}
+                max={data.settings.cap || 1}
+              />
+              <label>${data.spend.reserved.toFixed(4)} reserved</label>
+            </>
+          )}
         </div>
       </div>
       <div className="desktop-columns">
@@ -457,7 +473,7 @@ export default function Overview({
                 </dd>
               </div>
               <div>
-                <dt>OpenRouter</dt>
+                <dt>{data.provider?.label || "Model provider"}</dt>
                 <dd>{data.keyConfigured ? "configured" : "missing key"}</dd>
               </div>
               <div>

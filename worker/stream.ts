@@ -3,6 +3,7 @@
 export async function readCompletionStream(
   response: Response,
   onText?: (text: string) => void,
+  options: { requireUsage?: boolean } = {},
 ) {
   if (!response.body) throw new Error("Provider stream has no body");
   const message: any = { role: "assistant", content: "" };
@@ -72,7 +73,7 @@ export async function readCompletionStream(
   } finally {
     reader.releaseLock();
   }
-  if (!finished || !usage)
+  if (!finished || (!usage && options.requireUsage !== false))
     throw new Error("Incomplete provider stream; budget reservation retained");
   if (calls.size) {
     message.tool_calls = [...calls.entries()]

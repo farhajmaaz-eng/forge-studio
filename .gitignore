@@ -6,3 +6,6 @@ node_modules
 playwright-report
 test-results
 *.tsbuildinfo
+
+# Server-side provider keys, including custom data directories.
+**/provider-credentials.*

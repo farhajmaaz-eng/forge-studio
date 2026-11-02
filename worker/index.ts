@@ -9,6 +9,9 @@ import { active, recover, tick } from "./runtime";
 import { refreshModels } from "./model";
 import { roles } from "../src/lib/roles";
 import { librarySearch, libraryRead, libraryAction } from "./library";
+import { providerAction } from "./provider-actions";
+import { providerStatus } from "./provider";
+import { nvidiaFreeModelIds } from "../src/lib/model-presets";
 import {
   featureAction,
   featureRead,
@@ -30,6 +33,8 @@ async function reconnect() {
 }
 async function action(path: string, b: any) {
   if (path.startsWith("library/")) return libraryAction(path.slice(8), b);
+  const providerResult = await providerAction(path, b, active);
+  if (providerResult !== undefined) return providerResult;
   const featureResult = featureAction(path, b, active);
   if (featureResult !== undefined) return featureResult;
   if (path === "settings") {
@@ -66,6 +71,11 @@ async function action(path: string, b: any) {
         prompt: z.string().min(10).max(20000),
       })
       .parse(b);
+    if (
+      providerStatus().id === "nvidia" &&
+      !nvidiaFreeModelIds.includes(a.model)
+    )
+      throw new Error("Choose a model from the NVIDIA free-endpoint allowlist");
     if ([...active].some((id) => task(id).agent === a.name))
       throw new Error("Agent is active; pause before editing.");
     db.prepare(
