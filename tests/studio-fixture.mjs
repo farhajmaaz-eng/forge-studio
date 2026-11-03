@@ -2,7 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { writeFileSync, readFileSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync } from "node:fs";
 const server = new McpServer({ name: "fixture-studio", version: "1.0.0" });
 const text = (x) => ({ content: [{ type: "text", text: JSON.stringify(x) }] });
 server.registerTool("list_roblox_studios", { inputSchema: {} }, async () =>
@@ -19,7 +19,13 @@ server.registerTool(
 server.registerTool(
   "script_read",
   { inputSchema: { studio_id: z.string() } },
-  async () => text({ source: readFileSync(process.argv[2], "utf8") }),
+  async () =>
+    text({
+      exists: existsSync(process.argv[2]),
+      source: existsSync(process.argv[2])
+        ? readFileSync(process.argv[2], "utf8")
+        : "",
+    }),
 );
 server.registerTool(
   "start_stop_play",

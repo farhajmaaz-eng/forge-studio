@@ -491,8 +491,24 @@ export default function AgentWorkspace({
                 </Button>
               </form>
             </section>
+            <section className="panel">
+              <h3>{agent.name} usage</h3>
+              {(() => {
+                const usage = data.spend.byAgent?.find(
+                  (u: any) => u.agent === agent.name,
+                );
+                return (
+                  <p>
+                    {(usage?.inputTokens || 0).toLocaleString()} input tokens ·{" "}
+                    {(usage?.outputTokens || 0).toLocaleString()} output tokens
+                    · ${(usage?.cost || 0).toFixed(4)} recorded · $
+                    {(usage?.reserved || 0).toFixed(4)} reserved
+                  </p>
+                );
+              })()}
+            </section>
             <AgentForm
-              key={agent.name}
+              key={`${agent.name}:${agent.model}`}
               agent={agent}
               busy={busy}
               save={(b) => void act("agents", b)}

@@ -9,14 +9,19 @@ import {
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { nvidiaAgentModels } from "../src/lib/model-presets";
+import {
+  nvidiaAgentModels,
+  openRouterAgentModels,
+} from "../src/lib/model-presets";
 export type ProviderId = "nvidia" | "openrouter";
 type SavedProvider = {
+  version?: number;
   provider: ProviderId;
   keys: Partial<Record<ProviderId, string | null>>;
   allowUnpricedNim: boolean;
 };
 const schema = z.object({
+  version: z.number().optional(),
   provider: z.enum(["nvidia", "openrouter"]),
   keys: z.object({
     nvidia: z.string().nullable().optional(),
@@ -32,11 +37,16 @@ function location() {
 }
 function saved(): SavedProvider {
   const path = location();
-  if (existsSync(path))
-    return schema.parse(JSON.parse(readFileSync(path, "utf8")));
+  if (existsSync(path)) {
+    const config = schema.parse(JSON.parse(readFileSync(path, "utf8")));
+    // Upgrade the primary provider, retaining secondary credentials. Never reuse
+    // an NVIDIA credential against OpenRouter.
+    if (!config.version && process.env.MODEL_PROVIDER !== "nvidia")
+      config.provider = "openrouter";
+    return config;
+  }
   return {
-    provider:
-      process.env.MODEL_PROVIDER === "openrouter" ? "openrouter" : "nvidia",
+    provider: process.env.MODEL_PROVIDER === "nvidia" ? "nvidia" : "openrouter",
     keys: {},
     allowUnpricedNim: process.env.NVIDIA_TOKEN_ONLY === "true",
   };
@@ -79,12 +89,12 @@ export function defaultAgentModel(name: string) {
   return providerStatus().id === "nvidia"
     ? nvidiaAgentModels[name as keyof typeof nvidiaAgentModels]?.model ||
         nvidiaAgentModels.Lead.model
-    : process.env.OPENROUTER_MODEL || "deepseek/deepseek-v4.1-flash";
+    : process.env.OPENROUTER_MODEL || openRouterAgentModels.Lead.model;
 }
 export function saveProvider(body: unknown) {
   const a = z
     .object({
-      provider: z.literal("nvidia"),
+      provider: z.enum(["openrouter", "nvidia"]),
       apiKey: z
         .string()
         .trim()
@@ -101,6 +111,7 @@ export function saveProvider(body: unknown) {
   if (a.apiKey && a.removeKey)
     throw new Error("Choose either a replacement key or removal");
   const config = saved();
+  config.version = 2;
   config.provider = a.provider;
   config.allowUnpricedNim = a.allowUnpricedNim;
   if (a.removeKey) config.keys[a.provider] = null;

@@ -50,10 +50,13 @@ it("keeps manually entered keys private, supports retention/rotation/removal and
   expect(providerStatus().configured).toBe(false);
   delete process.env.NVIDIA_API_KEY;
 });
-it("only configures NVIDIA free endpoints and preserves prompts while applying agent models", async () => {
-  expect(() =>
-    saveProvider({ provider: "openrouter", apiKey: fakeKey }),
-  ).toThrow();
+it("configures providers explicitly and preserves prompts while applying agent models", async () => {
+  saveProvider({
+    provider: "openrouter",
+    apiKey: "test-openrouter-key-not-a-credential",
+  });
+  expect(providerStatus().id).toBe("openrouter");
+  saveProvider({ provider: "nvidia", apiKey: fakeKey });
   const prompts = db
     .prepare("SELECT name,prompt FROM agents ORDER BY name")
     .all();

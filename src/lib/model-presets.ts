@@ -35,3 +35,15 @@ export const nvidiaAgentModels = {
 export const nvidiaFreeModelIds: string[] = [
   ...new Set(Object.values(nvidiaAgentModels).map((p) => p.model)),
 ];
+
+// Verified in OpenRouter's public catalog (tools supported) on 2026-11-03.
+export const openRouterAgentModels = Object.fromEntries(
+  Object.keys(nvidiaAgentModels).map((name) => [
+    name,
+    {
+      model: "deepseek/deepseek-v4.1-flash",
+      reason:
+        "Low-cost tool-capable coding and planning; independently configurable per agent",
+    },
+  ]),
+) as Record<keyof typeof nvidiaAgentModels, { model: string; reason: string }>;

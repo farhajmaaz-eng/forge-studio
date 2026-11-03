@@ -1,3 +1,4 @@
+import "./instance-lock";
 import "dotenv/config";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
@@ -5,11 +6,13 @@ import { WebSocketServer } from "ws";
 import { z } from "zod";
 import { db, get, set, event, snapshot, secret, addTask, task } from "./store";
 import { studio } from "./mcp";
-import { active, recover, tick } from "./runtime";
+import { active, recover, tick, interruptStopped, abortAll } from "./runtime";
+import { parseOptions, routingSchema, parametersSchema } from "./model-config";
+import { redact, publicData } from "./errors";
 import { refreshModels } from "./model";
 import { roles } from "../src/lib/roles";
 import { librarySearch, libraryRead, libraryAction } from "./library";
-import { providerAction } from "./provider-actions";
+import { providerAction, providerOperationActive } from "./provider-actions";
 import { providerStatus } from "./provider";
 import { nvidiaFreeModelIds } from "../src/lib/model-presets";
 import {
@@ -36,11 +39,16 @@ async function action(path: string, b: any) {
   const providerResult = await providerAction(path, b, active);
   if (providerResult !== undefined) return providerResult;
   const featureResult = featureAction(path, b, active);
-  if (featureResult !== undefined) return featureResult;
+  if (featureResult !== undefined) {
+    interruptStopped();
+    return featureResult;
+  }
   if (path === "settings") {
     const a = z
       .object({
         cap: z.number().min(0).max(1000),
+        concurrency: z.number().int().min(1).max(3).optional(),
+        taskTimeoutMs: z.number().int().min(1000).max(3600000).optional(),
         paused: z.boolean(),
         approvalRequired: z.boolean(),
         mcpCommand: z.string().max(2000),
@@ -48,7 +56,7 @@ async function action(path: string, b: any) {
         maxSteps: z.number().int().min(5).max(100),
       })
       .parse(b);
-    if (active.size)
+    if (active.size || providerOperationActive())
       throw new Error(
         "Pause the runtime and wait for active tasks before changing settings.",
       );
@@ -58,6 +66,7 @@ async function action(path: string, b: any) {
   }
   if (path === "pause") {
     set("paused", z.boolean().parse(b.paused));
+    interruptStopped();
     return { ok: true };
   }
   if (path === "agents") {
@@ -66,26 +75,60 @@ async function action(path: string, b: any) {
         name: z.enum(Object.keys(roles) as [string, ...string[]]),
         model: z.string().min(1).max(200),
         temperature: z.number().min(0).max(2),
-        max_tokens: z.number().int().min(256).max(16000),
+        max_tokens: z.number().int().min(128).max(1000000),
+        timeout_ms: z.number().int().min(1000).max(300000).default(180000),
+        context_limit: z.number().int().min(1024).max(2000000).default(64000),
+        spending_limit: z.number().min(0).max(1000).default(0),
+        provider_options: z.unknown().optional(),
+        parameters: z.unknown().optional(),
         enabled: z.boolean(),
         prompt: z.string().min(10).max(20000),
       })
       .parse(b);
-    if (
-      providerStatus().id === "nvidia" &&
-      !nvidiaFreeModelIds.includes(a.model)
-    )
+    const targetProvider = providerStatus().id;
+    if (targetProvider === "nvidia" && !nvidiaFreeModelIds.includes(a.model))
       throw new Error("Choose a model from the NVIDIA free-endpoint allowlist");
     if ([...active].some((id) => task(id).agent === a.name))
       throw new Error("Agent is active; pause before editing.");
+    const routing = parseOptions(a.provider_options, routingSchema),
+      parameters = parseOptions(a.parameters, parametersSchema);
+    if (a.max_tokens >= a.context_limit)
+      throw new Error(
+        "Output-token limit must be smaller than the configured context limit",
+      );
+    if (targetProvider === "openrouter") {
+      let pricing = get<any>("pricing") || {};
+      if (!pricing[a.model]) {
+        await refreshModels();
+        pricing = get<any>("pricing");
+      }
+      if (!pricing[a.model])
+        throw new Error("Model ID is not in the OpenRouter catalog");
+      if (!pricing[a.model].parameters?.includes("tools"))
+        throw new Error("Choose a model that advertises tool calling");
+      if (a.max_tokens > (pricing[a.model].maxOutput || Infinity))
+        throw new Error("Output-token limit exceeds the model maximum");
+    }
+    if (
+      providerStatus().id !== targetProvider ||
+      [...active].some((id) => task(id)?.agent === a.name)
+    )
+      throw new Error(
+        "Provider or agent activity changed while checking the model. Pause the team and save again.",
+      );
     db.prepare(
-      "UPDATE agents SET model=?,temperature=?,max_tokens=?,enabled=?,prompt=? WHERE name=?",
+      "UPDATE agents SET model=?,temperature=?,max_tokens=?,enabled=?,prompt=?,timeout_ms=?,context_limit=?,spending_limit=?,provider_options=?,parameters=? WHERE name=?",
     ).run(
       a.model,
       a.temperature,
       a.max_tokens,
       Number(a.enabled),
       a.prompt,
+      a.timeout_ms,
+      a.context_limit,
+      a.spending_limit,
+      JSON.stringify(routing),
+      JSON.stringify(parameters),
       a.name,
     );
     return { ok: true };
@@ -104,8 +147,7 @@ async function action(path: string, b: any) {
     );
   }
   if (path === "models") {
-    await refreshModels();
-    return { ok: true };
+    return { ok: true, ...(await refreshModels()) };
   }
   if (path === "games") {
     const a = z
@@ -142,6 +184,7 @@ async function action(path: string, b: any) {
       JSON.stringify({ userResolved: true, evidence: a.evidence }),
       c.id,
     );
+    db.prepare("DELETE FROM locks WHERE owner=?").run(c.id);
     event(`User reconciled ${c.tool}: ${a.evidence}`, "User");
     return { ok: true };
   }
@@ -177,7 +220,7 @@ async function action(path: string, b: any) {
       "UPDATE tasks SET status='queued',attempts=0,next_at=0,steps=0,error=NULL WHERE id=?",
     ).run(t.id);
     db.prepare(
-      "UPDATE tasks SET status='queued',error=NULL WHERE run_id=? AND status='blocked'",
+      "UPDATE tasks SET status='queued',error=NULL WHERE run_id=? AND status='blocked' AND error='A dependency failed; retry it first.'",
     ).run(t.run_id);
     return { ok: true };
   }
@@ -208,7 +251,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET") {
       const result = featureRead(path, url.searchParams);
       if (result !== undefined) {
-        res.end(JSON.stringify(result));
+        res.end(JSON.stringify(publicData(result)));
         return;
       }
     }
@@ -255,13 +298,9 @@ const server = http.createServer(async (req, res) => {
         throw new Error("Request too large");
     }
     const result = await action(path, JSON.parse(raw || "{}"));
-    res.end(JSON.stringify(result));
+    res.end(JSON.stringify(publicData(result)));
   } catch (e) {
-    res
-      .writeHead(400)
-      .end(
-        JSON.stringify({ error: e instanceof Error ? e.message : String(e) }),
-      );
+    res.writeHead(400).end(JSON.stringify({ error: redact(e) }));
   }
 });
 const wss = new WebSocketServer({ noServer: true });
@@ -276,8 +315,19 @@ server.on("upgrade", (req, socket, head) => {
 });
 const port = Number(process.env.WORKER_PORT || 4318);
 set("workerPort", port);
+server.on("error", (e) => {
+  event(`Worker server failed: ${redact(e)}`, "System", "error");
+  process.exit(1);
+});
 server.listen(port, "127.0.0.1", () => {
-  console.log(`Forge worker listening on 127.0.0.1:${port}`);
+  console.log(
+    JSON.stringify({
+      level: "info",
+      message: "Forge worker listening",
+      host: "127.0.0.1",
+      port,
+    }),
+  );
   recover();
   void studio.connect();
   void refreshModels().catch((e) => event(String(e), "System", "error"));
@@ -286,16 +336,23 @@ let ticking = false;
 const timer = setInterval(() => {
   for (const c of wss.clients)
     if (c.readyState === 1) c.send('{"type":"refresh"}');
-  if (!ticking && !connecting) {
+  interruptStopped();
+  if (!studio.client && !connecting)
+    void studio.maintain().catch((e) => event(redact(e), "System", "error"));
+  if (!ticking && !connecting && !providerOperationActive()) {
     ticking = true;
     void tick()
       .catch((e) => event(String(e), "System", "error"))
       .finally(() => (ticking = false));
   }
 }, 1200);
+let shuttingDown = false;
 async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
   set("paused", true);
   clearInterval(timer);
+  abortAll();
   while (active.size) await new Promise((r) => setTimeout(r, 200));
   await studio.close();
   wss.close();

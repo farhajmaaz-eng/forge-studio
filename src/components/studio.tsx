@@ -1,5 +1,11 @@
 "use client";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useRef,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDesktopPreferences } from "@/lib/desktop";
@@ -134,16 +140,21 @@ export default function Studio({
     setSelectedGame(id);
     localStorage.setItem("forge-game", id);
   }
+  const loadVersion = useRef(0);
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     try {
-      const r = await fetch("/api/snapshot");
+      const r = await fetch("/api/snapshot", {
+        signal: AbortSignal.timeout(15000),
+      });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
+      if (version !== loadVersion.current) return;
       setData(d);
       setUpdatedAt(Date.now());
       setError("");
     } catch (e) {
-      setError(String(e));
+      if (version === loadVersion.current) setError(String(e));
     }
   }, []);
   useEffect(() => {
@@ -201,6 +212,7 @@ export default function Studio({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(330000),
       });
       const out = await r.json();
       if (!r.ok) throw new Error(out.error);
@@ -642,6 +654,8 @@ function SettingsForm({
           void act("settings", {
             cap: Number(f.get("cap")),
             maxSteps: Number(f.get("maxSteps")),
+            concurrency: Number(f.get("concurrency")),
+            taskTimeoutMs: Number(f.get("taskTimeoutMs")),
             paused: s.paused,
             approvalRequired: f.get("approvalRequired") === "on",
             mcpCommand: f.get("command"),
@@ -687,7 +701,7 @@ function SettingsForm({
         </h3>
         <div className="form-grid">
           <label>
-            Workspace spending cap (USD · priced providers)
+            Workspace spending cap (USD)
             <input
               name="cap"
               type="number"
@@ -695,6 +709,26 @@ function SettingsForm({
               max="1000"
               step="0.01"
               defaultValue={s.cap}
+            />
+          </label>
+          <label>
+            Concurrent agents (1–3)
+            <input
+              name="concurrency"
+              type="number"
+              min="1"
+              max="3"
+              defaultValue={s.concurrency || 3}
+            />
+          </label>
+          <label>
+            Task timeout per execution (milliseconds)
+            <input
+              name="taskTimeoutMs"
+              type="number"
+              min="1000"
+              max="3600000"
+              defaultValue={s.taskTimeoutMs || 600000}
             />
           </label>
           <label>
@@ -733,6 +767,11 @@ function SettingsForm({
             <Radio size={18} /> Studio bridge
           </h3>
           <Badge value={s.studioStatus} />
+          {s.studioError && (
+            <p role="alert" className="warning-text">
+              {s.studioError}
+            </p>
+          )}
           <p>
             {s.studioTools.length} official tools discovered. Permissions are
             restricted by agent role.

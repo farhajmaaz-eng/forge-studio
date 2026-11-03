@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Eye, EyeOff, KeyRound, RefreshCw, Trash2 } from "lucide-react";
-import { nvidiaAgentModels } from "@/lib/model-presets";
+import { nvidiaAgentModels, openRouterAgentModels } from "@/lib/model-presets";
 import { Button } from "./ui/button";
 import { ConfirmDialog } from "./ui/workspace-primitives";
 import { StatusChip, type Act } from "./feature-ui";
@@ -15,11 +15,13 @@ export default function ProviderSettings({
   busy: boolean;
 }) {
   const active = data.provider || {
-    id: "nvidia",
-    label: "NVIDIA NIM",
+    id: "openrouter",
+    label: "OpenRouter",
     configured: false,
   };
-  const provider = "nvidia";
+  const [provider, setProvider] = useState<"openrouter" | "nvidia">(active.id);
+  const presets =
+    provider === "openrouter" ? openRouterAgentModels : nvidiaAgentModels;
   const [apiKey, setApiKey] = useState(""),
     [showKey, setShowKey] = useState(false),
     [recommended, setRecommended] = useState(true),
@@ -51,7 +53,7 @@ export default function ProviderSettings({
             provider,
             apiKey,
             allowUnpricedNim: true,
-            applyRecommended: provider === "nvidia" && recommended,
+            applyRecommended: recommended,
           });
           if (out) {
             setApiKey("");
@@ -62,10 +64,26 @@ export default function ProviderSettings({
           }
         }}
       >
+        <label>
+          Provider
+          <select
+            value={provider}
+            disabled={disabled}
+            onChange={(e) => {
+              setProvider(e.target.value as "openrouter" | "nvidia");
+              setApiKey("");
+              setShowKey(false);
+              setResult("");
+            }}
+          >
+            <option value="openrouter">OpenRouter (primary)</option>
+            <option value="nvidia">NVIDIA NIM (optional)</option>
+          </select>
+        </label>
         <p>
-          NVIDIA free hosted endpoints only. No paid partner endpoint or
-          paid-provider fallback is used. Trial availability and limits are
-          managed by NVIDIA.
+          {provider === "openrouter"
+            ? "Use OPENROUTER_API_KEY on the server or enter a key below. Each agent can select its own tool-capable model in Team. No model fallback is used; provider fallback is off by default."
+            : "Optional NVIDIA free endpoints. Availability and limits are managed by NVIDIA."}
         </p>
         <label>
           API key
@@ -102,23 +120,22 @@ export default function ProviderSettings({
           snapshots and diagnostics. Enter a key separately on each
           installation.
         </small>
-        {provider === "nvidia" && (
-          <>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={recommended}
-                disabled={disabled}
-                onChange={(e) => setRecommended(e.target.checked)}
-              />
-              Apply recommended models to all seven agents
-            </label>
-            <small>
-              Calls use the free-endpoint allowlist and track actual token
-              usage. Forge does not invent dollar prices or quota balances.
-            </small>
-          </>
-        )}
+        <>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={recommended}
+              disabled={disabled}
+              onChange={(e) => setRecommended(e.target.checked)}
+            />
+            Apply recommended models to all seven agents
+          </label>
+          <small>
+            {provider === "openrouter"
+              ? "OpenRouter calls track tokens and reported or estimated cost against workspace and agent limits. Refresh the catalog to check current models."
+              : "NVIDIA calls use the free-endpoint allowlist and track token usage; dollar costs may be unknown."}
+          </small>
+        </>
         {working && (
           <p className="warning-text">
             Pause the team and let current operations finish before changing
@@ -176,22 +193,20 @@ export default function ProviderSettings({
           {result}
         </p>
       )}
-      {provider === "nvidia" && (
-        <details>
-          <summary>Recommended agent models</summary>
-          <dl className="v2-provider-models">
-            {Object.entries(nvidiaAgentModels).map(([name, preset]) => (
-              <div key={name}>
-                <dt>{name}</dt>
-                <dd>
-                  <strong>{preset.model}</strong>
-                  <small>{preset.reason}</small>
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </details>
-      )}
+      <details>
+        <summary>Recommended agent models</summary>
+        <dl className="v2-provider-models">
+          {Object.entries(presets).map(([name, preset]) => (
+            <div key={name}>
+              <dt>{name}</dt>
+              <dd>
+                <strong>{preset.model}</strong>
+                <small>{preset.reason}</small>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </details>
       {remove && (
         <ConfirmDialog
           title="Remove this provider key?"

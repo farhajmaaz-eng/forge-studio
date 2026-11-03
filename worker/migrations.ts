@@ -22,6 +22,13 @@ export function migrateFeatures(db: Database.Database) {
         request_key: "TEXT",
         plan_status: "TEXT NOT NULL DEFAULT 'automatic'",
       },
+      agents: {
+        provider_options: "TEXT NOT NULL DEFAULT '{}'",
+        parameters: "TEXT NOT NULL DEFAULT '{}'",
+        timeout_ms: "INTEGER NOT NULL DEFAULT 180000",
+        context_limit: "INTEGER NOT NULL DEFAULT 64000",
+        spending_limit: "REAL NOT NULL DEFAULT 0",
+      },
       usage: { provider: "TEXT NOT NULL DEFAULT 'openrouter'" },
       approvals: {
         note: "TEXT NOT NULL DEFAULT ''",
@@ -40,6 +47,8 @@ export function migrateFeatures(db: Database.Database) {
           db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${sql}`);
     }
     db.exec(`
+      CREATE TABLE IF NOT EXISTS studio_revisions(studio_id TEXT PRIMARY KEY,revision INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS studio_inspections(task_id TEXT NOT NULL,studio_id TEXT NOT NULL,revision INTEGER NOT NULL,PRIMARY KEY(task_id,studio_id));
       CREATE UNIQUE INDEX IF NOT EXISTS runs_request_key ON runs(request_key) WHERE request_key IS NOT NULL;
       CREATE TABLE IF NOT EXISTS attention_requests(id TEXT PRIMARY KEY,task_id TEXT NOT NULL REFERENCES tasks(id),call_id TEXT NOT NULL,question TEXT NOT NULL,priority INTEGER NOT NULL DEFAULT 1,status TEXT NOT NULL DEFAULT 'pending',reply TEXT NOT NULL DEFAULT '',created TEXT DEFAULT CURRENT_TIMESTAMP,resolved_at TEXT,UNIQUE(task_id,call_id));
       CREATE TABLE IF NOT EXISTS agent_messages(id TEXT PRIMARY KEY,task_id TEXT NOT NULL REFERENCES tasks(id),actor TEXT NOT NULL,kind TEXT NOT NULL,content TEXT NOT NULL,status TEXT DEFAULT 'complete',created TEXT DEFAULT CURRENT_TIMESTAMP,updated TEXT DEFAULT CURRENT_TIMESTAMP);

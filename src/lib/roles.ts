@@ -46,6 +46,10 @@ export type Role = keyof typeof roles;
 export const readers = [
   "list_roblox_studios",
   "script_read",
+  "read_script",
+  "get_script_source",
+  "get_instance_tree",
+  "get_instance_properties",
   "script_search",
   "script_grep",
   "search_game_tree",

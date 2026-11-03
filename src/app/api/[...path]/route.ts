@@ -33,7 +33,7 @@ async function proxy(
         },
         body: req.method === "POST" ? await req.text() : undefined,
         cache: "no-store",
-        signal: AbortSignal.timeout(130000),
+        signal: AbortSignal.timeout(330000),
       },
     );
     return new NextResponse(await r.arrayBuffer(), {

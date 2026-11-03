@@ -475,11 +475,19 @@ export default function TaskWorkspace({
     [sort, setSort] = useState("priority"),
     [limit, setLimit] = useState(50);
   const tasks: any[] = data.tasks;
+  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(
+    () => new Set(),
+  );
   useEffect(() => {
     if (focusedTaskId) {
       setQuery("");
       setFilter("all");
       setLimit(tasks.length || 50);
+      setExpandedTasks((previous) =>
+        previous.has(focusedTaskId)
+          ? previous
+          : new Set([...previous, focusedTaskId]),
+      );
     }
   }, [focusedTaskId, focusVersion, tasks.length]);
   useEffect(() => {
@@ -613,6 +621,16 @@ export default function TaskWorkspace({
               {items.map((t) => (
                 <TaskItem
                   key={t.id}
+                  expanded={expandedTasks.has(t.id)}
+                  onExpanded={(value) =>
+                    setExpandedTasks((previous) => {
+                      if (previous.has(t.id) === value) return previous;
+                      const next = new Set(previous);
+                      if (value) next.add(t.id);
+                      else next.delete(t.id);
+                      return next;
+                    })
+                  }
                   task={t}
                   data={data}
                   act={act}
@@ -632,23 +650,27 @@ export default function TaskWorkspace({
   );
 }
 function TaskItem({
+  expanded,
+  onExpanded,
   task: t,
   data,
   act,
   busy,
 }: {
+  expanded: boolean;
+  onExpanded: (value: boolean) => void;
   task: any;
   data: any;
   act: Act;
   busy: boolean;
 }) {
-  const [open, setOpen] = useState(false);
   const game = gameForTask(data, t);
   return (
     <details
       id={`task-${t.id}`}
       className="task-detail"
-      onToggle={(e) => setOpen(e.currentTarget.open)}
+      open={expanded}
+      onToggle={(e) => onExpanded(e.currentTarget.open)}
     >
       <summary>
         <div className="task-row">
@@ -665,7 +687,7 @@ function TaskItem({
           <ChevronRight size={14} />
         </div>
       </summary>
-      {open && <TaskInspector task={t} data={data} act={act} busy={busy} />}
+      {expanded && <TaskInspector task={t} data={data} act={act} busy={busy} />}
     </details>
   );
 }

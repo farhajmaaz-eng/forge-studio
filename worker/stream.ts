@@ -1,3 +1,4 @@
+import { OperationError, redact } from "./errors";
 // Chat Completions SSE: framing and tool-call deltas are assembled before any
 // tools execute. Reasoning fields are intentionally never surfaced to the UI.
 export async function readCompletionStream(
@@ -5,13 +6,15 @@ export async function readCompletionStream(
   onText?: (text: string) => void,
   options: { requireUsage?: boolean } = {},
 ) {
-  if (!response.body) throw new Error("Provider stream has no body");
+  if (!response.body) throw new OperationError("Provider stream has no body");
   const message: any = { role: "assistant", content: "" };
   const calls = new Map<number, any>();
   let usage: any = null,
     buffer = "",
     finished = false,
-    lastUpdate = 0;
+    lastUpdate = 0,
+    finishReason: string | null = null;
+  const reasoningDetails: any[] = [];
   function frame(frame: string) {
     const data = frame
       .split(/\r?\n/)
@@ -25,12 +28,28 @@ export async function readCompletionStream(
     }
     const chunk = JSON.parse(data);
     if (chunk.error)
-      throw new Error(
-        `Provider stream: ${chunk.error.message || "generation failed"}`,
+      throw new OperationError(
+        `Provider stream: ${redact(chunk.error.message || "generation failed")}`,
       );
     if (chunk.usage) usage = chunk.usage;
+    if (chunk.choices?.[0]?.finish_reason)
+      finishReason = chunk.choices[0].finish_reason;
     const delta = chunk.choices?.[0]?.delta;
     if (!delta) return;
+    for (const detail of delta.reasoning_details || []) {
+      const old = reasoningDetails.find(
+        (d) =>
+          d.index === detail.index &&
+          d.type === detail.type &&
+          d.id === detail.id,
+      );
+      if (old)
+        for (const k of ["text", "data", "summary"]) {
+          if (typeof detail[k] === "string")
+            old[k] = (old[k] || "") + detail[k];
+        }
+      else reasoningDetails.push({ ...detail });
+    }
     if (typeof delta.content === "string") {
       message.content += delta.content;
       if (Date.now() - lastUpdate > 200) {
@@ -40,7 +59,7 @@ export async function readCompletionStream(
     }
     for (const call of delta.tool_calls || []) {
       if (!Number.isInteger(call.index) || call.index < 0 || call.index > 100)
-        throw new Error("Invalid streamed tool index");
+        throw new OperationError("Invalid streamed tool index");
       const current = calls.get(call.index) || {
         id: "",
         type: "function",
@@ -74,15 +93,18 @@ export async function readCompletionStream(
     reader.releaseLock();
   }
   if (!finished || (!usage && options.requireUsage !== false))
-    throw new Error("Incomplete provider stream; budget reservation retained");
+    throw new OperationError(
+      "Incomplete provider stream; budget reservation retained",
+    );
   if (calls.size) {
     message.tool_calls = [...calls.entries()]
       .sort((a, b) => a[0] - b[0])
       .map(([, c]) => c);
     if (message.tool_calls.some((c: any) => !c.id || !c.function.name))
-      throw new Error("Incomplete streamed tool call");
+      throw new OperationError("Incomplete streamed tool call");
   }
   if (!message.content) message.content = null;
   else onText?.(message.content);
-  return { usage, choices: [{ message }] };
+  if (reasoningDetails.length) message.reasoning_details = reasoningDetails;
+  return { usage, choices: [{ message, finish_reason: finishReason }] };
 }

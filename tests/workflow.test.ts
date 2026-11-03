@@ -39,15 +39,19 @@ vi.mock("../worker/model", () => ({
         content: "Builder delegated; independent verification follows.",
       };
     }
-    if (a.name === "Builder")
-      return !outputs.length
-        ? call("multi_edit", {
-            source: '-- Checkpoint\nprint("Checkpoint ready")',
-          })
-        : {
-            role: "assistant",
-            content: "Created checkpoint script in Studio.",
-          };
+    if (a.name === "Builder") {
+      if (!outputs.length) return call("script_read", {});
+      if (outputs.length === 1)
+        return call("multi_edit", {
+          source: '-- Checkpoint\nprint("Checkpoint ready")',
+        });
+      if (outputs.length === 2) return call("script_read", {});
+      return {
+        role: "assistant",
+        content:
+          "Created checkpoint script in Studio and read back the result.",
+      };
+    }
     if (a.name === "Tester") {
       if (outputs.length === 0) return call("script_read", {});
       if (outputs.length === 1) return call("start_stop_play", { start: true });
@@ -200,7 +204,7 @@ describe("Persistent local workflow", () => {
       )
       .run(id);
     runtime.recover();
-    expect(store.task(id).status).toBe("queued");
+    expect(store.task(id).status).toBe("failed");
     expect(
       (
         store.db

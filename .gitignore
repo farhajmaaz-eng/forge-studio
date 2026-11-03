@@ -9,3 +9,10 @@ test-results
 
 # Server-side provider keys, including custom data directories.
 **/provider-credentials.*
+
+# Private worker state under custom data directories.
+**/worker.pid
+**/worker.secret
+**/forge.sqlite*
+**/checkpoints.sqlite*
+**/worker-owner.sqlite*

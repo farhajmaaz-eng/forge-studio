@@ -6,13 +6,13 @@ A local-first Roblox AI development studio built with Next.js, TypeScript, Tailw
 
 ## Start here
 
-Requires Node.js 22+, npm, an NVIDIA Developer API key for the hosted free endpoints, and current Roblox Studio **on the same Windows/macOS machine as the worker**. Roblox Studio is not available natively on this Linux build machine.
+Requires Node.js 22+, npm, an OpenRouter API key with access to a tool-capable model, and current Roblox Studio **on the same Windows/macOS machine as the worker**. Roblox Studio is not available natively on this Linux build machine.
 
 ```bash
 cd /root/forge-studio
 npm ci
 cp .env.example .env
-# Configure Studio's official MCP command. Enter your NVIDIA key in Settings after launch.
+# Set OPENROUTER_API_KEY and configure Studio's official MCP command in .env.
 npm run worker
 ```
 
@@ -31,9 +31,9 @@ To copy this project to a Studio computer, copy the directory excluding `node_mo
 1. Open a place in Roblox Studio. Assistant → **… → Manage MCP Servers** → **Enable Studio as MCP server**.
 2. Copy the official command and arguments into Settings, save, then click **Connect / reconnect**. The worker dynamically discovers actual tool schemas; no third-party Roblox plugin is required.
 3. On macOS the official executable is `/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP` with arguments `[]`.
-4. On Windows use executable `cmd.exe` and arguments `["/c","C:\\Users\\YOU\\AppData\\Local\\Roblox\\mcp.bat"]`. Use an absolute path with your actual username (environment variables inside JSON arguments are not automatically expanded by this app).
+4. On Windows use executable `cmd.exe` and arguments `["/c","cd /d %LOCALAPPDATA%\\Roblox && .\\mcp.bat"]`. The worker expands `%LOCALAPPDATA%` and other environment variables before startup; paths with spaces remain inside the original argument.
 5. Games → **Discover Studios**. Copy the returned `studio_id`, enter a game name and that ID, then add the game. Each request pins its target Studio ID; changing the selected game cannot redirect an existing run.
-6. Open **Settings → Model provider**, enter your own NVIDIA key, leave **Apply recommended models** checked, and save. No key is embedded in this repository. Team lets you choose among the approved free-endpoint models and configure each agent’s prompt, temperature, token limit and enabled state. See [NVIDIA setup](docs/NVIDIA_PROVIDER.md).
+6. Set `OPENROUTER_API_KEY` in `.env` and restart the worker, or select **OpenRouter** under **Settings → Model provider** and enter your own key. Keep **Apply recommended models** checked when migrating. No key is embedded in this repository. Team lets each agent choose a different verified tool-capable model, routing, parameters and limits. See [OpenRouter setup](docs/OPENROUTER_SETUP.md).
 7. Send a request in Lead Chat. Lead makes a dependency graph; specialists inspect and implement through real MCP calls. Go to Reviews to inspect and approve the exact arguments of every mutation, including Luau execution and play controls. The task resumes on approval.
 8. Tester independently reads the implementation, starts a playtest, collects console evidence, stops playtesting and records a verdict. Passing work enters user review; accept it or request changes. New implementation handoffs and revisions require new verification.
 
@@ -44,16 +44,18 @@ Suggested first request: “Add a server-side checkpoint system to my obby. Pres
 - **Next.js** serves eleven responsive dashboard pages and a same-origin API proxy. All privileged operations go through the local worker. No browser-bundled API keys.
 - **Worker** (`worker/index.ts`) binds to `127.0.0.1:4318`. Authenticated HTTP uses a random 0600 local token, and WebSocket broadcasts only refresh notifications. The UI fetches protected snapshots through Next. HTTP polling is the fallback. `WORKER_PORT` is configurable; restart both processes when changing it.
 - **Seven independent agents** each have isolated prompts, persistent memory, conversation/tool context, role-based tools, task histories and execution cycles. Lead delegates; Architect designs; Builder codes Luau; Frame builds UI; Scenic builds worlds; Balance tunes economies; Tester checks behavior. Every model turn is a genuine separate request to the configured model provider; there is no production simulator or seeded activity.
-- **LangGraph** runs reason/tool phases with persistent SQLite checkpoints per task thread. Task messages and tool outcomes are separately persisted to support partial tool batches and restart recovery. The SQLite dependency scheduler runs at most three workers concurrently and one task per agent. Dependencies, retries with backoff, handoffs, blocked-task recovery, step limits and user review are durable.
+- **LangGraph** runs reason/tool phases with persistent SQLite checkpoints per task thread. Task messages and tool outcomes are separately persisted to support partial tool batches and restart recovery. The SQLite dependency scheduler runs one to three agents concurrently (configurable in Settings) and one task per agent. Dependencies, retries with backoff, handoffs, blocked-task recovery, step limits and user review are durable.
 - **Studio access** uses SDK stdio transport and discovered official tool schemas. Tool lists are intersected with role allowlists. A per-Studio database lock serializes all place operations, including reads, so agents never inspect a partially applied concurrent operation. Approval decisions bind to persisted tool call IDs and exact payloads. Unknown tools are denied; arbitrary Luau is always considered a mutation.
 - **Recovery** uses a tool-call ledger to prevent reapplying finished operations. If a write was interrupted or returned an ambiguous transport error, the task fails rather than replaying the call. Reviews shows uncertain operations: inspect Studio, record whether the call took effect, then retry the task in Tasks. Reservations for ambiguous provider calls remain counted against the cap.
 - **SQLite** uses WAL and transactions for tasks, agents, private memories, chat, games, runs, approvals, events, usage, locks and tool calls. Runtime data is in `.data/forge.sqlite` and `.data/checkpoints.sqlite`. Back up `.data` with processes stopped; do not commit it.
 
 ### Spending behavior
 
-The default NVIDIA setup calls only a curated allowlist of hosted models whose NVIDIA pages offer a **Free Endpoint**. It does not route to partner endpoints or fall back to paid providers. NVIDIA’s developer trial limits and availability apply; no unlimited quota is invented. Settings supports entering, rotating and removing your own key, stored only in a private server-side file under the data directory.
+OpenRouter is the primary provider. The low-cost default is `deepseek/deepseek-v4.1-flash`, verified in the public catalog with tool support on 2026-11-03. Every agent can choose a different model. Forge never substitutes another model. Provider fallback is disabled by default; Team exposes explicit routing options. Endpoint price ceilings default to the catalog token prices so routing cannot silently choose a more expensive endpoint.
 
-NVIDIA calls record actual token counts when supplied. Missing token counts or dollar costs remain unknown; they are not replaced with invented zero prices. The sidebar shows trial token usage. Historical priced usage and the existing USD cap remain in the database; the old priced-provider adapter is retained for explicit legacy deployments and regression tests, but is not offered in the free-endpoint setup. See [accounting details](docs/NVIDIA_PROVIDER.md).
+The workspace cap defaults to **$9**, with optional per-agent USD limits. Each priced call reserves a conservative bound based on the configured context limit and endpoint price ceiling before sending a request. Parallel reservations count against both caps. Actual tokens and provider cost are recorded; missing dollar costs are explicitly estimated from the catalog. Definitive rejections release reservations, while ambiguous network outcomes retain them. Zero-priced models are supported when confirmed in the catalog. The UI shows workspace and per-agent usage. Additional non-token-priced charges are rejected to preserve accounting bounds. Provider account limits remain the final billing control.
+
+NVIDIA remains an explicitly selected secondary adapter, with its existing free-endpoint restrictions and token-only accounting. Historical usage, prompts, memories, tasks and approvals are preserved. Known built-in NVIDIA assignments migrate to the OpenRouter default; custom models are not overwritten. See [migration details](docs/OPENROUTER_SETUP.md).
 
 ### Approval and rollback boundaries
 
@@ -74,6 +76,8 @@ node scripts/ui-smoke.mjs
 node scripts/desktop-smoke.mjs
 node scripts/library-smoke.mjs
 node scripts/redesign-smoke.mjs
+# Focused provider/runtime check with an isolated worker + dashboard:
+FORGE_DATA_DIR=/tmp/forge-audit-check node scripts/reliability-smoke.mjs
 ```
 
 The integration test replaces **only model responses** with deterministic test responses and launches a **test-only MCP stdio server** through the actual SDK. It verifies Lead delegation → queued Builder → approval before file modification → independent Tester read/play/console evidence → user review, plus budget reservations, unauthorized-tool rejection and restart recovery. The test does not call a paid provider and is not a real Roblox playtest.
@@ -84,15 +88,16 @@ The dashboard includes a compact Lead request bar, actionable setup and approval
 
 **Verified here:** dependency installation; production build; TypeScript; SDK protocol integration workflow; budget, permissions and recovery tests; local UI/browser checks (see delivery report for results).
 
-**Requires your environment:** enter your NVIDIA key manually and use **Test saved connection** for a short tool-call check. Real Studio modification/playtesting also requires your live Roblox Studio instance. Automated checks use synthetic credentials and stubbed inference, never a key pasted into chat.
+**Requires your environment:** configure your OpenRouter key and use **Test saved connection** for a short tool-call check. Real Studio modification/playtesting also requires your live Roblox Studio instance. Automated checks use synthetic credentials and stubbed inference, never a key pasted into chat.
 
 ## Official references
 
 - Roblox Studio MCP setup and current tool catalog: https://create.roblox.com/docs/studio/mcp
 - MCP TypeScript SDK: https://github.com/modelcontextprotocol/typescript-sdk
 - LangGraph persistence: https://docs.langchain.com/oss/javascript/langgraph/persistence
-- NVIDIA model catalog: https://integrate.api.nvidia.com/v1/models
-- NVIDIA developer access: https://docs.api.nvidia.com/nim/docs/product
+- OpenRouter model catalog: https://openrouter.ai/api/v1/models
+- OpenRouter tools and multi-turn messages: https://openrouter.ai/docs/guides/features/tool-calling
+- OpenRouter provider routing: https://openrouter.ai/docs/guides/routing/provider-selection
 
 ## Library
 
@@ -114,6 +119,10 @@ The existing Forge design is retained. New workspaces add project-scoped streame
 
 Games includes lifecycle metadata and LiveOps views. Market and LiveOps accept validated JSON exports with a source URL, ISO 8601 observation time, and quality (`exported`, `sampled`, or `estimated`). Their Import dialogs document the JSON format. No live telemetry or market feed is connected by default. Pitches retain versions and market evidence; an accepted pitch can become a planning project and an approval-gated Lead task.
 
-Library defaults to the existing References section, with Assets and Systems tabs alongside it. Local media uploads are limited to 2 MB and validated against their declared type. Larger media can be referenced by URL. Script/module content is stored as text; importing or approving an artifact never executes, installs, uploads, or publishes it. Task and run stops take effect at execution boundaries; an already-sent Studio operation may finish.
+Library defaults to the existing References section, with Assets and Systems tabs alongside it. Local media uploads are limited to 2 MB and validated against their declared type. Larger media can be referenced by URL. Script/module content is stored as text; importing or approving an artifact never executes, installs, uploads, or publishes it. Task and run stops interrupt inference and waiting operations; an already-sent Studio operation may finish and is flagged for reconciliation if its result is ambiguous.
 
 Quick verification is `npm test` plus `npm run build`. For browser integration, start the worker and web app with the same explicitly isolated `/tmp/forge-v2-*` `FORGE_DATA_DIR`, then run `FORGE_DATA_DIR=/tmp/forge-v2-check node scripts/features-v2-smoke.mjs`. It tests the changed workflows and focused mobile layouts. Add `--full` for the longer all-route, three-width matrix. The script refuses a production data directory. All captured V2 examples use that isolated database.
+
+## Reliability audit
+
+See [the audit, fixes and verification report](docs/RELIABILITY_AUDIT.md) for the API → scheduler → agent → MCP execution path, regression coverage and live-integration limitations.

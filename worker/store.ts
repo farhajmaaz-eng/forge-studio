@@ -5,6 +5,8 @@ import { resolve } from "node:path";
 import { randomUUID, randomBytes } from "node:crypto";
 import { roles } from "../src/lib/roles";
 import { migrateFeatures } from "./migrations";
+import { nvidiaAgentModels } from "../src/lib/model-presets";
+import { redact, publicData, OperationError } from "./errors";
 import { defaultAgentModel, providerStatus } from "./provider";
 export const dataDir = resolve(process.env.FORGE_DATA_DIR || ".data");
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
@@ -36,6 +38,9 @@ CREATE TABLE IF NOT EXISTS locks (name TEXT PRIMARY KEY,owner TEXT NOT NULL);
 migrateFeatures(db);
 const defaults: Record<string, unknown> = {
   cap: 9,
+  concurrency: 3,
+  taskTimeoutMs: 600000,
+  maxTasksPerRun: 50,
   paused: false,
   approvalRequired: true,
   mcpCommand: process.env.ROBLOX_MCP_COMMAND || "",
@@ -55,6 +60,19 @@ for (const [name, r] of Object.entries(roles))
   db.prepare(
     "INSERT OR IGNORE INTO agents (name,model,prompt) VALUES (?,?,?)",
   ).run(name, defaultAgentModel(name), r.brief);
+// Migrate only the old built-in NVIDIA assignments. User prompts and custom
+// assignments survive; no running conversation is rewritten.
+if (!get("openRouterMigrationV2") && providerStatus().id === "openrouter") {
+  db.transaction(() => {
+    for (const [name, preset] of Object.entries(nvidiaAgentModels))
+      db.prepare("UPDATE agents SET model=? WHERE name=? AND model=?").run(
+        defaultAgentModel(name),
+        name,
+        preset.model,
+      );
+    set("openRouterMigrationV2", true);
+  })();
+}
 export function get<T = any>(key: string): T {
   return JSON.parse(
     (db.prepare("SELECT value FROM settings WHERE key=?").get(key) as any)
@@ -71,7 +89,15 @@ export function event(message: string, agent = "System", level = "info") {
   db.prepare("INSERT INTO events(level,agent,message) VALUES (?,?,?)").run(
     level,
     agent,
-    message,
+    redact(message),
+  );
+  console.log(
+    JSON.stringify({
+      time: new Date().toISOString(),
+      level,
+      agent,
+      message: redact(message),
+    }),
   );
 }
 export function task(id: string): any {
@@ -84,6 +110,42 @@ export function addTask(
   instructions: string,
   deps: string[] = [],
 ) {
+  if (!Object.hasOwn(roles, agent))
+    throw new OperationError("Unknown task agent");
+  const run: any = db
+    .prepare("SELECT id,game_id FROM runs WHERE id=?")
+    .get(run_id);
+  if (!run) throw new OperationError("Task run does not exist");
+  for (const dep of deps) {
+    const dependency = task(dep);
+    const dependencyRun: any =
+      dependency &&
+      db.prepare("SELECT game_id FROM runs WHERE id=?").get(dependency.run_id);
+    if (
+      !dependency ||
+      (dependency.run_id !== run_id &&
+        (!run.game_id || dependencyRun?.game_id !== run.game_id))
+    )
+      throw new OperationError(
+        "Dependencies must belong to the same run or project",
+      );
+  }
+  const count = db
+    .prepare("SELECT COUNT(*) AS n FROM tasks WHERE run_id=?")
+    .get(run_id) as any;
+  const limit = Math.max(2, get<number>("maxTasksPerRun") || 50);
+  const pendingTester = db
+    .prepare(
+      "SELECT id FROM tasks WHERE run_id=? AND agent='Tester' AND status NOT IN ('completed','cancelled','failed') LIMIT 1",
+    )
+    .get(run_id);
+  if (
+    count.n >= limit ||
+    (agent !== "Tester" && !pendingTester && count.n >= limit - 1)
+  )
+    throw new OperationError(
+      "Run task limit reached; review the delegation plan",
+    );
   const id = randomUUID();
   db.prepare(
     "INSERT INTO tasks(id,run_id,agent,title,instructions,deps) VALUES (?,?,?,?,?,?)",
@@ -92,11 +154,19 @@ export function addTask(
   return id;
 }
 export function spent() {
-  return db
+  const totals = db
     .prepare(
       "SELECT COALESCE(SUM(cost),0) AS cost,COALESCE(SUM(reserved),0) AS reserved,SUM(CASE WHEN cost IS NULL THEN 1 ELSE 0 END) AS unpriced,COALESCE(SUM(input_tokens),0) AS inputTokens,COALESCE(SUM(output_tokens),0) AS outputTokens,COALESCE(SUM(CASE WHEN provider='nvidia' THEN input_tokens ELSE 0 END),0) AS nimInputTokens,COALESCE(SUM(CASE WHEN provider='nvidia' THEN output_tokens ELSE 0 END),0) AS nimOutputTokens FROM usage",
     )
     .get() as any;
+  return {
+    ...totals,
+    byAgent: db
+      .prepare(
+        "SELECT agent,COALESCE(SUM(input_tokens),0) AS inputTokens,COALESCE(SUM(output_tokens),0) AS outputTokens,COALESCE(SUM(cost),0) AS cost,COALESCE(SUM(reserved),0) AS reserved FROM usage GROUP BY agent",
+      )
+      .all(),
+  };
 }
 export function reserve(
   taskId: string,
@@ -106,8 +176,25 @@ export function reserve(
 ) {
   return db.transaction(() => {
     const s = spent();
+    if (!Number.isFinite(amount) || amount < 0)
+      throw new OperationError("Invalid cost reservation");
+    const agentSettings: any = db
+      .prepare("SELECT spending_limit FROM agents WHERE name=?")
+      .get(agent);
+    const agentSpend: any = db
+      .prepare(
+        "SELECT COALESCE(SUM(cost),0)+COALESCE(SUM(reserved),0) AS total FROM usage WHERE agent=?",
+      )
+      .get(agent);
+    if (
+      agentSettings?.spending_limit > 0 &&
+      agentSpend.total + amount > agentSettings.spending_limit
+    )
+      throw new OperationError(
+        "Agent spending limit reached; adjust it in Team settings",
+      );
     if (s.cost + s.reserved + amount > get<number>("cap"))
-      throw new Error(
+      throw new OperationError(
         "Spending cap reached; increase cap in Settings to continue.",
       );
     const id = randomUUID();
@@ -123,7 +210,7 @@ export function snapshot() {
       db.prepare("SELECT * FROM settings WHERE key != 'pricing'").all() as any[]
     ).map((x) => [x.key, JSON.parse(x.value)]),
   );
-  return {
+  return publicData({
     agents: db.prepare("SELECT * FROM agents").all(),
     tasks: db
       .prepare(
@@ -168,5 +255,5 @@ export function snapshot() {
     settings,
     keyConfigured: providerStatus().configured,
     provider: providerStatus(),
-  };
+  });
 }
