@@ -11,7 +11,14 @@ let active = 0,
   maxActive = 0,
   count = 0;
 server.registerTool("list_roblox_studios", { inputSchema: {} }, async () =>
-  text([{ studio_id: mode === "stale" ? "new-studio" : "test-studio" }]),
+  text([
+    {
+      studio_id:
+        process.argv[4] || (mode === "stale" ? "new-studio" : "test-studio"),
+      name: "Protocol test game",
+      place_id: process.argv[5] || undefined,
+    },
+  ]),
 );
 server.registerTool(
   mode === "alias" ? "read_script" : "script_read",

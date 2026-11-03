@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS usage (id TEXT PRIMARY KEY,task_id TEXT,agent TEXT,mo
 CREATE TABLE IF NOT EXISTS locks (name TEXT PRIMARY KEY,owner TEXT NOT NULL);
 `);
 migrateFeatures(db);
-const defaults: Record<string, unknown> = {
+export const defaults: Record<string, unknown> = {
   cap: 9,
   concurrency: 3,
   taskTimeoutMs: 600000,

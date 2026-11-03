@@ -6,7 +6,20 @@ import { WebSocketServer } from "ws";
 import { z } from "zod";
 import { db, get, set, event, snapshot, secret, addTask, task } from "./store";
 import { studio } from "./mcp";
-import { active, recover, tick, interruptStopped, abortAll } from "./runtime";
+import { previewStudioSwitch, confirmStudioSwitch } from "./studio-selection";
+import {
+  previewWorkspaceReset,
+  confirmWorkspaceReset,
+} from "./workspace-reset";
+import {
+  active,
+  recover,
+  tick,
+  interruptStopped,
+  abortAll,
+  backupCheckpoints,
+  clearCheckpoints,
+} from "./runtime";
 import { parseOptions, routingSchema, parametersSchema } from "./model-config";
 import { redact, publicData } from "./errors";
 import { refreshModels } from "./model";
@@ -23,6 +36,7 @@ import {
   decideRun,
 } from "./features";
 let connecting = false;
+let maintaining = false;
 async function reconnect() {
   if (connecting) throw new Error("Connection already in progress");
   if (active.size)
@@ -35,6 +49,35 @@ async function reconnect() {
   }
 }
 async function action(path: string, b: any) {
+  if (maintaining)
+    throw new Error(
+      "Workspace maintenance is in progress. Wait for it to finish.",
+    );
+  if (
+    path.startsWith("studio/switch/") ||
+    path.startsWith("workspace/reset/")
+  ) {
+    if (connecting || studio.isConnecting || providerOperationActive())
+      throw new Error("Wait for connection/provider operations to finish");
+    maintaining = true;
+    try {
+      if (path === "studio/switch/preview")
+        return await previewStudioSwitch(b, active, () => studio.discover());
+      if (path === "studio/switch/confirm")
+        return await confirmStudioSwitch(b, active, () => studio.discover());
+      if (path === "workspace/reset/preview")
+        return previewWorkspaceReset(b, active);
+      if (path === "workspace/reset/confirm")
+        return await confirmWorkspaceReset(b, active, {
+          closeStudio: () => studio.close(),
+          backupCheckpoints,
+          clearCheckpoints,
+        });
+      throw new Error("Unknown maintenance action");
+    } finally {
+      maintaining = false;
+    }
+  }
   if (path.startsWith("library/")) return libraryAction(path.slice(8), b);
   const providerResult = await providerAction(path, b, active);
   if (providerResult !== undefined) return providerResult;
@@ -138,13 +181,7 @@ async function action(path: string, b: any) {
     return { status: get("studioStatus") };
   }
   if (path === "studios") {
-    return await studio.call(
-      "Lead",
-      "list_roblox_studios",
-      {},
-      "",
-      randomUUID(),
-    );
+    return await studio.discover();
   }
   if (path === "models") {
     return { ok: true, ...(await refreshModels()) };
@@ -153,16 +190,20 @@ async function action(path: string, b: any) {
     const a = z
       .object({
         name: z.string().min(1).max(200),
-        studioId: z.string().max(200).default(""),
+        studioId: z.string().trim().max(200).default(""),
+        universeId: z.string().regex(/^\d*$/).max(30).default(""),
+        placeId: z.string().regex(/^\d*$/).max(30).default(""),
       })
       .parse(b);
     db.prepare(
-      "INSERT INTO games(id,name,studio_id,stage) VALUES (?,?,?,?)",
+      "INSERT INTO games(id,name,studio_id,stage,universe_id,place_id) VALUES (?,?,?,?,?,?)",
     ).run(
       randomUUID(),
       a.name,
       a.studioId,
       a.studioId ? "prototype" : "concept",
+      a.universeId,
+      a.placeId,
     );
     return { ok: true };
   }
@@ -337,9 +378,9 @@ const timer = setInterval(() => {
   for (const c of wss.clients)
     if (c.readyState === 1) c.send('{"type":"refresh"}');
   interruptStopped();
-  if (!studio.client && !connecting)
+  if (!studio.client && !connecting && !maintaining)
     void studio.maintain().catch((e) => event(redact(e), "System", "error"));
-  if (!ticking && !connecting && !providerOperationActive()) {
+  if (!ticking && !connecting && !maintaining && !providerOperationActive()) {
     ticking = true;
     void tick()
       .catch((e) => event(String(e), "System", "error"))

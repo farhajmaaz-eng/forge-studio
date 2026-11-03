@@ -19,6 +19,7 @@ export function migrateFeatures(db: Database.Database) {
         requester: "TEXT NOT NULL DEFAULT 'Lead'",
       },
       runs: {
+        studio_pin_revision: "INTEGER NOT NULL DEFAULT 0",
         request_key: "TEXT",
         plan_status: "TEXT NOT NULL DEFAULT 'automatic'",
       },
@@ -28,6 +29,10 @@ export function migrateFeatures(db: Database.Database) {
         timeout_ms: "INTEGER NOT NULL DEFAULT 180000",
         context_limit: "INTEGER NOT NULL DEFAULT 64000",
         spending_limit: "REAL NOT NULL DEFAULT 0",
+      },
+      tool_calls: {
+        studio_id: "TEXT NOT NULL DEFAULT ''",
+        pin_revision: "INTEGER NOT NULL DEFAULT 0",
       },
       usage: { provider: "TEXT NOT NULL DEFAULT 'openrouter'" },
       approvals: {
@@ -47,6 +52,7 @@ export function migrateFeatures(db: Database.Database) {
           db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${sql}`);
     }
     db.exec(`
+      CREATE TABLE IF NOT EXISTS studio_pin_changes(id TEXT PRIMARY KEY,game_id TEXT NOT NULL,old_studio_id TEXT NOT NULL,new_studio_id TEXT NOT NULL,details TEXT NOT NULL,created TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS studio_revisions(studio_id TEXT PRIMARY KEY,revision INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS studio_inspections(task_id TEXT NOT NULL,studio_id TEXT NOT NULL,revision INTEGER NOT NULL,PRIMARY KEY(task_id,studio_id));
       CREATE UNIQUE INDEX IF NOT EXISTS runs_request_key ON runs(request_key) WHERE request_key IS NOT NULL;

@@ -37,6 +37,7 @@ import { roles, type Role } from "@/lib/roles";
 import { Avatar } from "./agent-avatar";
 import Overview from "./overview";
 import LibraryHub from "./library-hub";
+import WorkspaceReset from "./workspace-reset";
 import ProviderSettings from "./provider-settings";
 import TaskWorkspace, { NewTaskDialog } from "./task-workspace";
 import AgentWorkspace, { LeadWorkspace } from "./agent-workspace";
@@ -223,6 +224,10 @@ export default function Studio({
             chat: "Request queued",
             settings: "Settings saved",
             "provider/save": "Provider settings saved",
+            "studio/switch/confirm":
+              "Studio target updated; the team remains paused",
+            "workspace/reset/confirm":
+              "Reset complete. Configure Studio in Settings and Games",
             agents: "Agent settings saved",
             approve: "Approval recorded",
             review: "Review recorded",
@@ -557,7 +562,12 @@ export default function Studio({
               update={updatePreferences}
               data={data}
             />
-            <SettingsForm data={data} busy={busy} act={act} />
+            <SettingsForm
+              key={data.settings.resetRevision || "initial"}
+              data={data}
+              busy={busy}
+              act={act}
+            />
           </>
         )}
         <footer className="footer">
@@ -780,6 +790,7 @@ function SettingsForm({
             Connect / reconnect
           </Button>
         </section>
+        <WorkspaceReset data={data} act={act} busy={busy} />
         <section className="panel form spaced">
           <h3>Recovery & rollback</h3>
           <p>

@@ -16,3 +16,6 @@ test-results
 **/forge.sqlite*
 **/checkpoints.sqlite*
 **/worker-owner.sqlite*
+
+# Private reset snapshots (also when FORGE_DATA_DIR is customized).
+**/backups/reset-*

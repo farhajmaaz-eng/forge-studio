@@ -808,7 +808,7 @@ export function featureAction(
       .object({
         id: identifier,
         name: z.string().trim().min(1).max(200),
-        studioId: z.string().max(200),
+        studioId: z.string().trim().max(200),
         stage: z.enum(gameStages),
         universeId: z.string().regex(/^\d*$/).max(30),
         placeId: z.string().regex(/^\d*$/).max(30),

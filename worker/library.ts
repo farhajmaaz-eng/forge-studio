@@ -30,6 +30,18 @@ db.transaction(() => {
       });
   }
 })();
+export function resetLibrary() {
+  db.prepare("DELETE FROM library_entries").run();
+  for (const x of seeds)
+    put.run({
+      id: x.id,
+      title: x.title,
+      category: x.category,
+      summary: x.summary,
+      content: x.content,
+      payload: JSON.stringify(x),
+    });
+}
 function unpack(row: any, full = false) {
   if (!row) return null;
   const a = JSON.parse(row.payload);

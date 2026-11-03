@@ -27,25 +27,67 @@ export function expandEnvironment(
     },
   );
 }
-export function studioIds(result: any): string[] | null {
-  let value = result.structuredContent;
-  if (!value)
-    for (const item of result.content || [])
-      if (item.type === "text") {
-        try {
-          value = JSON.parse(item.text);
-          break;
-        } catch {
-          /* Plain-text discovery is displayed to the user. */
-        }
+export type StudioInstance = {
+  id: string;
+  name: string;
+  placeId: string;
+  universeId: string;
+};
+export function studioInstances(result: any): StudioInstance[] | null {
+  const values: any[] = [result?.structuredContent];
+  for (const item of result?.content || [])
+    if (item.type === "text") {
+      try {
+        values.push(
+          JSON.parse(item.text.replace(/^```(?:json)?\s*|\s*```$/g, "")),
+        );
+      } catch {
+        /* Unrecognized discovery must never authorize a switch. */
       }
-  const list = Array.isArray(value)
-    ? value
-    : value?.studios || value?.connected_studios;
-  if (!Array.isArray(list)) return null;
-  return list
-    .map((x) => x.studio_id || x.studioId || x.id)
-    .filter((x) => typeof x === "string");
+    }
+  for (const value of values) {
+    const list = Array.isArray(value)
+      ? value
+      : value?.studios || value?.connected_studios || value?.instances;
+    if (!Array.isArray(list)) continue;
+    const normalized: StudioInstance[] = [];
+    for (const item of list) {
+      if (!item || typeof item !== "object") return null;
+      const id = item.studio_id || item.studioId || item.id;
+      if (typeof id !== "string" || !id.trim() || id.length > 200) return null;
+      const numeric = (v: any) =>
+        v == null || String(v) === "0"
+          ? ""
+          : /^\d+$/.test(String(v))
+            ? String(v)
+            : "";
+      normalized.push({
+        id: id.trim(),
+        name:
+          typeof item.name === "string"
+            ? item.name.slice(0, 200)
+            : "Unnamed Studio",
+        placeId: numeric(item.place_id ?? item.placeId),
+        universeId: numeric(item.universe_id ?? item.universeId),
+      });
+    }
+    if (new Set(normalized.map((x) => x.id)).size !== normalized.length)
+      return null;
+    return normalized;
+  }
+  return null;
+}
+export function studioIds(result: any) {
+  return studioInstances(result)?.map((x) => x.id) ?? null;
+}
+export function modelToolSchema(schema: any) {
+  // Selection belongs to the confirmed run, never to model-generated arguments.
+  const { studio_id: _pin, ...properties } = schema.properties || {};
+  return {
+    ...schema,
+    properties,
+    required: (schema.required || []).filter((x: string) => x !== "studio_id"),
+  };
 }
 const validator = new AjvJsonSchemaValidator();
 const inspectionTools = new Set([
@@ -71,9 +113,13 @@ export class Studio {
   private nextReconnect = 0;
   private reconnectAttempts = 0;
   private stopped = false;
+  get isConnecting() {
+    return this.connecting !== null;
+  }
   private clearTools() {
     this.tools = [];
     set("studioTools", []);
+    set("studioDiscovery", null);
   }
   async connect() {
     if (this.connecting) return this.connecting;
@@ -163,6 +209,10 @@ export class Studio {
       set("studioError", "");
       this.reconnectAttempts = 0;
       event(`Studio connected: ${this.tools.length} tools discovered`);
+      if (this.tools.some((t) => t.name === "list_roblox_studios"))
+        await this.discover().catch((error) =>
+          set("studioDiscoveryError", redact(error)),
+        );
     } catch (error) {
       await this.close(false);
       this.reconnectAttempts++;
@@ -174,6 +224,35 @@ export class Studio {
       set("studioError", message);
       event(message, "System", "error");
     }
+  }
+  async discover() {
+    const client = this.client;
+    if (!client || !this.tools.some((t) => t.name === "list_roblox_studios"))
+      throw new StudioCallError(
+        "Connect Studio MCP before discovering instances",
+      );
+    const result = await client.callTool(
+      { name: "list_roblox_studios", arguments: {} },
+      undefined,
+      { timeout: 15000 },
+    );
+    if (this.client !== client || result.isError)
+      throw new StudioCallError(
+        "Studio discovery changed or failed. Reconnect and refresh instances.",
+      );
+    const instances = studioInstances(result);
+    if (!instances)
+      throw new StudioCallError(
+        "Studio returned an unrecognized instance list. Refresh discovery; no target can be switched until it is verified.",
+      );
+    const discovery = { instances, checkedAt: Date.now() };
+    set("studioDiscovery", discovery);
+    set("studioDiscoveryError", "");
+    const known =
+      get<Record<string, StudioInstance>>("studioKnownInstances") || {};
+    for (const instance of instances) known[instance.id] = instance;
+    set("studioKnownInstances", known);
+    return { ...result, ...discovery };
   }
   async maintain() {
     if (
@@ -226,7 +305,7 @@ export class Studio {
       );
     if (args.studio_id && args.studio_id !== studioId)
       throw new StudioCallError(
-        "Tool target differs from the pinned Studio instance",
+        "Tool target differs from the pinned Studio instance. Pause the team and review the project’s Studio connection in Games; reconnecting alone does not switch persisted runs.",
       );
     const input =
       name === "list_roblox_studios" ? args : { ...args, studio_id: studioId };
@@ -263,7 +342,7 @@ export class Studio {
       signal?.throwIfAborted();
       const taskId = owner.split(":")[0],
         t = task(taskId);
-      if (t?.stop_requested || get("paused"))
+      if (t && (t.stop_requested || get("paused")))
         throw new StudioCallError(
           "Studio operation cancelled before execution",
         );
@@ -305,9 +384,41 @@ export class Studio {
             "Studio discovery failed; rediscover instances in Games",
           );
         const ids = studioIds(discovery);
-        if (ids && !ids.includes(studioId))
+        if (!ids)
           throw new StudioCallError(
-            "The selected Studio instance is no longer available. Rediscover it in Games and create a new run; existing work stays pinned to its original instance.",
+            "Studio discovery is unrecognized; refresh instances before executing work",
+          );
+        const boundTask = task(owner.split(":")[0]);
+        if (boundTask) {
+          const project: any = db
+            .prepare(
+              "SELECT g.* FROM games g JOIN runs r ON r.game_id=g.id WHERE r.id=?",
+            )
+            .get(boundTask.run_id);
+          const target = studioInstances(discovery)?.find(
+            (x) => x.id === studioId,
+          );
+          if (
+            target &&
+            project?.place_id &&
+            project.place_id !== target.placeId
+          )
+            throw new StudioCallError(
+              "The Studio instance does not match this project's Place ID. Open the correct game before executing tools.",
+            );
+          if (
+            target &&
+            project?.universe_id &&
+            target.universeId &&
+            project.universe_id !== target.universeId
+          )
+            throw new StudioCallError(
+              "The Studio instance does not match this project's Universe ID",
+            );
+        }
+        if (!ids.includes(studioId))
+          throw new StudioCallError(
+            "The pinned Studio instance is no longer available. Pause the team, open Games → Studio connection, and review a switch to the reopened instance. No target will change without your confirmation.",
           );
       }
       checkStopped();

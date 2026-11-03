@@ -1,4 +1,5 @@
 "use client";
+import StudioConnection from "./studio-connection";
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Gamepad2, Link2, Plus, Upload } from "lucide-react";
@@ -151,6 +152,13 @@ export default function GameOps({
               Edit project
             </Button>
           </div>
+          <StudioConnection
+            key={game.id}
+            data={data}
+            game={game}
+            act={act}
+            busy={busy}
+          />
           <div className="tabs" role="group" aria-label="Game analytics views">
             {tabs.map((t) => (
               <button
@@ -453,7 +461,12 @@ export default function GameOps({
                       universeId: f.get("universeId"),
                       placeId: f.get("placeId"),
                     }
-                  : { name: f.get("name"), studioId: f.get("studioId") },
+                  : {
+                      name: f.get("name"),
+                      studioId: f.get("studioId"),
+                      universeId: f.get("universeId"),
+                      placeId: f.get("placeId"),
+                    },
               );
               if (out) {
                 setAdd(false);
@@ -477,8 +490,8 @@ export default function GameOps({
                 placeholder="Optional for planning; required for Studio execution"
               />
             </label>
-            {edit && (
-              <>
+            <>
+              {edit && (
                 <label>
                   Lifecycle stage
                   <select name="stage" defaultValue={game.stage}>
@@ -487,28 +500,28 @@ export default function GameOps({
                     ))}
                   </select>
                 </label>
-                <label>
-                  Roblox universe ID
-                  <input
-                    name="universeId"
-                    pattern="[0-9]*"
-                    defaultValue={game.universe_id}
-                  />
-                </label>
-                <label>
-                  Roblox place ID
-                  <input
-                    name="placeId"
-                    pattern="[0-9]*"
-                    defaultValue={game.place_id}
-                  />
-                </label>
-              </>
-            )}
+              )}
+              <label>
+                Roblox universe ID
+                <input
+                  name="universeId"
+                  pattern="[0-9]*"
+                  defaultValue={edit ? game.universe_id : ""}
+                />
+              </label>
+              <label>
+                Roblox place ID
+                <input
+                  name="placeId"
+                  pattern="[0-9]*"
+                  defaultValue={edit ? game.place_id : ""}
+                />
+              </label>
+            </>
             <p>
-              Changing the project connection does not retarget existing runs.
-              Draft plans bind their Studio target only when you explicitly
-              approve execution.
+              These fields configure future work. To switch unfinished runs, use
+              Studio connection → Review Studio switch. Draft plans bind their
+              Studio target only when you explicitly approve execution.
             </p>
             <Button disabled={busy}>
               {edit ? "Save project" : "Add project"}
